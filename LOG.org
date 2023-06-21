@@ -1,7 +1,7 @@
 #+TITLE:	AcctMaint-2023 Research
 #+SUBTITLE:	Log
 #+DATE:		2023-06-09 05:39:10-04:00
-#+LASTMOD: 2023-06-20 20:52:08-0400 (EDT)
+#+LASTMOD: 2023-06-20 23:21:21-0400 (EDT)
 #+OPTIONS:	toc:nil num:nil
 #+STARTUP:	indent show3levels
 #+CATEGORIES[]:	Research
@@ -10,9 +10,12 @@
 * Tuesday, June 20, 2023
 ** SQitch
 :LOGBOOK:
-CLOCK: [2023-06-20 Tue 20:30]
+CLOCK: [2023-06-20 Tue 20:30]--[2023-06-20 Tue 23:21] =>  2:51
 :END:
-
+*** Step 1: Add Development Schema
+*** Step 2: Add User Table and Basic Triggers
+*** Step 3: Add User History Table
+*** Step 4: Add Insert User Function
 * Friday, June 9, 2023
 - Created project
 - 

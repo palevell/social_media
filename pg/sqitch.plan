@@ -3,3 +3,5 @@
 %uri=https://github.com/palevell/social_media
 
 devschema 2023-06-21T00:32:51Z Patrick <patrick29501@gmx.com> # Add development schema
+dt_user [devschema] 2023-06-21T01:02:50Z Patrick <patrick29501@gmx.com> # Add user table
+dt_user_history [dt_user devschema] 2023-06-21T11:46:57Z Patrick <patrick29501@gmx.com> # Add User History table
