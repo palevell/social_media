@@ -1,0 +1,14 @@
+#+TITLE:	AcctMaint-2023 Research
+#+SUBTITLE:	README
+#+DATE:		2023-06-09 05:39:10-04:00
+#+LASTMOD: 2023-06-20 20:49:38-0400 (EDT)
+#+OPTIONS:	toc:nil num:nil
+#+STARTUP:	indent showeverything
+#+CATEGORIES[]:	Research
+#+TAGS[]:	readme python sql sqitch twitter snscrape socialmedia
+
+* URLs
+- [[https://github.com/palevell/social_media][GitHub Repository]]
+
+* Description
+

@@ -1,0 +1,28 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+snscrape = {git = "https://github.com/JustAnotherArchivist/snscrape.git"}
+environs = "*"
+proxyscrape = "*"
+xdg = "*"
+click = "*"
+pid = "*"
+pandas = "*"
+alembic = "*"
+sqlalchemy = "*"
+psycopg2-binary = "*"
+munch = "*"
+pillow = "*"
+oyaml = "*"
+coloredlogs = "*"
+
+[dev-packages]
+faker = "*"
+tabulate = "*"
+black-with-tabs = "*"
+
+[requires]
+python_version = "3.11"

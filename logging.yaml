@@ -1,0 +1,33 @@
+# logging.yaml - Saturday, June 10, 2023
+
+version: 1
+
+formatters:
+  default:
+    datefmt: "%Y-%m-%d %H:%M:%S%z"
+  simple:
+    format:  "%(levelname)-8s %(message)s"
+  extended:
+    format:  "%(asctime)s %(name)-12s %(levelname)-8s: %(message)s"
+    datefmt: "%Y-%m-%d %H:%M:%S%z"
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    level: DEBUG
+    formatter: simple
+
+  file_handler:
+    class: logging.FileHandler
+    level: DEBUG
+    filename: /home/patrick/.local/var/log/AcctMaint-2023.log
+    formatter: extended
+
+loggers:
+  dev:
+    handlers: [console, file_handler]
+  test:
+    handlers: [file_handler]
+root:
+  handlers: [console,file_handler]
+  propagate: true
