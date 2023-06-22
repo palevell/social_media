@@ -6,6 +6,6 @@ SET search_path TO development;
 
 DROP TABLE dt_user_history CASCADE;
 
-DROP FUNCTION fn_user_history;
+DROP FUNCTION fn_user_history CASCADE;
 
 COMMIT;

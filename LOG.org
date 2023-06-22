@@ -1,12 +1,17 @@
 #+TITLE:	AcctMaint-2023 Research
 #+SUBTITLE:	Log
 #+DATE:		2023-06-09 05:39:10-04:00
-#+LASTMOD: 2023-06-20 23:21:21-0400 (EDT)
+#+LASTMOD: 2023-06-22 05:50:40-0400 (EDT)
 #+OPTIONS:	toc:nil num:nil
 #+STARTUP:	indent show3levels
 #+CATEGORIES[]:	Research
 #+TAGS[]:	log python sql sqitch twitter snscrape socialmedia
 
+* Thursday, June 22, 2023
+:LOGBOOK:
+CLOCK: [2023-06-22 Thu 05:45]
+:END:
+** Imported Old Twitter User Data (get-whoami)
 * Tuesday, June 20, 2023
 ** SQitch
 :LOGBOOK:

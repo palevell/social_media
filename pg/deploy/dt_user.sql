@@ -9,7 +9,7 @@ SET search_path TO development;
 CREATE TABLE dt_user (
 	id		BIGINT NOT NULL PRIMARY KEY,
 	asof		TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-	username	VARCHAR(16) NOT NULL UNIQUE,
+	username	VARCHAR(16) NOT NULL,
 	displayname	VARCHAR(50) NOT NULL,
 	created_at	TIMESTAMPTZ NOT NULL,
 	followers_count	BIGINT,
@@ -32,6 +32,7 @@ CREATE TABLE dt_user (
 CREATE INDEX idx_user_asof_desc ON dt_user (asof DESC);
 CREATE INDEX idx_user_last_tweeted ON dt_user (last_tweeted);
 CREATE INDEX idx_user_status_count_desc ON dt_user (statuses_count DESC);
+CREATE INDEX idx_user_username ON dt_user (username);
 
 COMMENT ON TABLE  dt_user    IS 'Twitter Users';
 COMMENT ON COLUMN dt_user.id IS 'Twitter User ID';
@@ -60,6 +61,7 @@ COMMENT ON COLUMN dt_user.banner_url IS 'Profile banner URL';
 CREATE OR REPLACE FUNCTION fn_user_asof() RETURNS trigger
 	LANGUAGE 'plpgsql' AS $$
 BEGIN
+	RAISE NOTICE 'fn_user_asof';
 	new.asof = now();
 	RETURN new;
 END; $$;

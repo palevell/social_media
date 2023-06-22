@@ -13,11 +13,11 @@ pid = "*"
 pandas = "*"
 alembic = "*"
 sqlalchemy = "*"
-psycopg2-binary = "*"
 munch = "*"
 pillow = "*"
 oyaml = "*"
 coloredlogs = "*"
+psycopg = "*"
 
 [dev-packages]
 faker = "*"

@@ -72,7 +72,7 @@ BEGIN
 		protected, verified, has_image_url, description,
 		location, url, badge_url, image_url, banner_url
 	) VALUES (
-		new.id, now(), new.username, new.displayname, new.created_at,
+		new.id, new.asof, new.username, new.displayname, new.created_at,
 		new.followers_count, new.friends_count, new.listed_count,
 		new.media_count, new.statuses_count, new.last_tweeted,
 		new.protected, new.verified, new.has_image_url, new.description,
