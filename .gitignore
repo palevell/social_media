@@ -751,3 +751,9 @@ compile_commands.json
 
 # Data
 /data
+
+# Symlinks
+/log_dir
+
+# DBeaver
+/dbeaver

@@ -29,5 +29,6 @@ loggers:
   test:
     handlers: [file_handler]
 root:
+  level: DEBUG
   handlers: [console,file_handler]
   propagate: true

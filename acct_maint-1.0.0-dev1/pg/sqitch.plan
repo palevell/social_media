@@ -1,0 +1,14 @@
+%syntax-version=1.0.0
+%project=acct_maint_2023
+%uri=https://github.com/palevell/social_media
+
+devschema 2023-06-21T00:32:51Z Patrick <patrick29501@gmx.com> # Add development schema
+dt_user [devschema] 2023-06-21T01:02:50Z Patrick <patrick29501@gmx.com> # Add user table
+dt_user_history [dt_user devschema] 2023-06-21T11:46:57Z Patrick <patrick29501@gmx.com> # Add User History table
+fn_user_insert [dt_user_history dt_user devschema] 2023-06-21T13:39:21Z Patrick <patrick29501@gmx.com> # Add insert user function
+dt_relation [dt_user devschema] 2023-06-22T10:18:20Z Patrick <patrick29501@gmx.com> # Add Relation Table
+dt_relation_history [dt_relation dt_user devschema] 2023-06-23T13:20:10Z Patrick <patrick29501@gmx.com> # Add Relation History Table
+dt_auth_user [dt_user devschema] 2023-06-24T13:26:34Z Patrick <patrick29501@gmx.com> # Add Authorized User Table
+asof_triggers [dt_relation dt_user devschema] 2023-06-24T14:27:32Z Patrick <patrick29501@gmx.com> # Add As-of Triggers
+fn_insert_relation [dt_relation dt_user devschema] 2023-06-27T03:07:26Z Patrick <patrick29501@gmx.com> # Add Relation Insert function
+@v1.0.0-dev1 2023-06-27T11:29:26Z Patrick <patrick29501@gmx.com> # Tag v1.0.0-dev1.

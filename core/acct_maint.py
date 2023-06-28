@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# acct_maint.py - Saturday, September 4, 2021
+# acct_maint.py - Thursday, June 22, 2023
 """ Follow retweeters and unfollow less-active tweeps """
-""" ToDo: Load cached data from database """
-__version__ = "0.9.107-dev1"
+__version__ = "0.1.3-dev5"
 
 import builtins
 import click
 import coloredlogs
 import json
+import logging
 import logging.config
 import lzma
 import os
@@ -20,10 +20,10 @@ import sys
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from logging.handlers import RotatingFileHandler
-from munch import Munch
 from os.path import basename, exists, getmtime, join
 from pathlib import Path
 from random import shuffle, uniform
+from requests import get
 from tabulate import tabulate
 from time import sleep
 
@@ -46,82 +46,181 @@ if not exists(PIDDIR):
 
 
 @click.command()
-@click.argument(
-	"screen_name", default=Config.DEFAULT_TWIT
-)  # , help='@Twitter handle to check')
-@click.option("-c", "--csv/--no-csv", default=False, help="Save to CSV file")
-@click.option("-d", "--database/--no-database", default=True, help="Save to database")
-@click.option(
-	"-f", "--first-run", is_flag=True, help="First run for this user (don't cache)"
-)
+@click.argument("twit", nargs=-1)
 @pidfile(piddir=PIDDIR)
-def main(screen_name, csv, database, first_run):
-	# fn_logger = logging.getLogger("%s.main" % __module__)
+def main(twit):
+	twit_list = list(twit)
+	for _ in range(10):
+		shuffle(twit_list)
+	twit = tuple(twit_list)
+	for screen_name in twit:
+		screen_name = screen_name.lstrip("@")
 
-	screen_name = screen_name.lstrip("@")
+		# Load from Twitter data dump
+		acct_dict = load_account_info(screen_name)
+		acct_id = acct_dict["accountId"]
+		asof = acct_dict["asof"]
+		following_ids = load_friend_ids(screen_name=screen_name)
+		logger.info(f"Following IDs: {len(following_ids):,d}")
+		follower_ids = load_follower_ids(screen_name=screen_name)
+		logger.info(f"Follower IDs : {len(follower_ids):,d}")
 
-	# Load from Twitter data dump
-	following_ids = load_friend_ids(screen_name=screen_name)
-	logger.info(f"Following IDs: {len(following_ids):,d}")
+		cached_follower_ids = get_cached_user_ids(follower_ids)
+		cached_following_ids = get_cached_user_ids(following_ids)
 
-	# Find User IDs already in database
-	if not first_run:
-		cached_user_ids = get_cached_user_ids(following_ids)
-		logger.info(f"Cached User IDs: {len(cached_user_ids):,d}")
-	else:
-		cached_user_ids = []
+		# Determine which User IDs to fetch (ie. not cached or current)
+		fetch_follower_ids = sorted(list(set(follower_ids) - set(cached_follower_ids)))
+		fetch_following_ids = sorted(
+			list(set(following_ids) - set(cached_following_ids))
+		)
+		# Eliminate duplicates
+		fetch_user_ids = sorted(list(set(fetch_following_ids + fetch_follower_ids)))
+		logger.info(f"User IDs to fetch: {len(fetch_user_ids):,d}")
 
-	# Determine which User IDs to fetch (ie. not cached or current)
-	fetch_ids = sorted(list(set(following_ids) - set(cached_user_ids)))
+		if fetch_user_ids:
+			# Testing
+			if TEST_MAX_USERS:
+				# Shuffle list of IDs to fetch and pick first XXX values
+				shuffle(fetch_user_ids)
+				fetch_user_ids = fetch_user_ids[:TEST_MAX_USERS]
+				# Reduce following/follower IDs to those in the list, above
+				following_ids = list(
+					set(following_ids).intersection(set(fetch_user_ids))
+				)
+				follower_ids = list(set(follower_ids).intersection(set(fetch_user_ids)))
+				logger.info(f"[TEST] User IDs to fetch: {len(fetch_user_ids)}")
+				for i, fetch_user_id in enumerate(fetch_user_ids):
+					logger.info(f"    {i + 1:4d} {fetch_user_id}")
+			# Fetch profiles for User IDs
+			line_number = 0
+			all_fetched_ids = []
+			batch_size = Config.BATCH_SIZE
+			batches = (
+				fetch_user_ids[i : i + batch_size]
+				for i in range(0, len(fetch_user_ids), batch_size)
+			)
+			for batch_count, batch in enumerate(batches):
+				if batch_count > 0:
+					snoozer(MIN_BATCH_DELAY, MAX_BATCH_DELAY)
+				fetched_ids = fetch_users(batch, line_number)
+				if fetched_ids:
+					fetched_follower_ids = sorted(
+						list(set(follower_ids).intersection(set(fetched_ids)))
+					)
+					fetched_following_ids = sorted(
+						list(set(following_ids).intersection(set(fetched_ids)))
+					)
 
-	# Fetch profiles for User IDs
-	line_number = 0
-	batch_size = Config.BATCH_SIZE
-	batches = (
-		fetch_ids[i : i + batch_size] for i in range(0, len(fetch_ids), batch_size)
-	)
-	for batch_count, batch in enumerate(batches):
-		if batch_count > 0:
-			snoozer(MIN_BATCH_DELAY, MAX_BATCH_DELAY)
-		following_users = get_users(batch, csv, database, line_number)
-		line_number += batch_size
-		do_nothing()
+					# Update dt_relations
+					update_relations(
+						acct_id,
+						asof,
+						follower_ids=fetched_follower_ids,
+						following_ids=fetched_following_ids,
+					)
+					line_number += batch_size
+					do_nothing()
 	return
 
 
 def init():
-	global cache_dir
-	msg = "%s %s Run Start: %s" % (
-		__module__,
-		__version__,
-		_run_dt.replace(microsecond=0),
-	)
+	msg = f"{__module__} {__version__} Run Start: {_run_dt.replace(microsecond=0)}"
 	if DRYRUN:
 		msg += " (DRY RUN)"
-	logging.info(msg)
-	"""if Config.DB_REBUILD:
-		tablenames = ['dt_account',
-					  'dt_candidate',
-					  'dt_pruned',
-					  'dt_user',
-					  'dt_user_friend',
-		]
-		for tablename in tablenames:
-			if schema:
-				tablename = schema + '.' + tablename
-			sql = "DROP TABLE IF EXISTS %s;" % tablename
-			try:
-				engine.execute(sql)
-			except Exception as e:
-				logging.exception("Exception: %s" % e)"""
+	logger.info(msg)
+
+	proxy = os.getenv("ALL_PROXY")
+	if proxy:
+		print(f"ALL_PROXY = {proxy}")
+	# Check IP Address being used
+	check_ip_urls = [
+		"https://httpbin.org/ip",
+		"https://ifconfig.co/ip",
+	]
+	shuffle(check_ip_urls)
+	url = check_ip_urls[0]
+	r = get(url, timeout=(30))
+	try:
+		if r.ok:
+			logger.info(f"IP Address: {r.text.rstrip()} via {url}")
+	except TimeoutError as e:
+		logger.exception(e)
+		do_nothing()
 	return
 
 
 def eoj():
 	stop_dt = datetime.now().astimezone().replace(microsecond=0)
 	duration = stop_dt.replace(microsecond=0) - _run_dt.replace(microsecond=0)
-	logging.info("Run Stop : %s  Duration: %s" % (stop_dt, duration))
+	logger.info("Run Stop : %s  Duration: %s" % (stop_dt, duration))
 	return
+
+
+def fetch_users(user_ids: list | set, lineno: int = 0) -> list:
+	fetched_ids = []
+	shuffle(user_ids)
+	for count, user_id in enumerate(user_ids):
+		if count > 0:
+			sleep(uniform(MIN_SEARCH_DELAY, MAX_SEARCH_DELAY))
+		try:
+			user = sntwitter.TwitterUserScraper(user_id)
+			entity = user.entity
+
+			if entity.link:
+				url = entity.link.url
+			else:
+				url = None
+			last_tweeted = None
+			i, tweet = -1, None
+			for i, tweet in enumerate(user.get_items()):
+				last_tweeted = tweet.date
+				if i == 1:
+					break
+			if not last_tweeted:
+				# Protected or shadow-banned account?
+				msg = " ".join(
+					[
+						f"{lineno+count+1:5d}) {user_id:19d}",
+						f"No tweets",
+						f"https://twitter.com/intent/user?user_id={user_id}",
+					]
+				)
+				logger.warning(msg)
+			logger.debug(f"{lineno+count+1:5d}) {user_id:19d} Adding to database . . .")
+			good_id = insert_user(
+				user_id=int(entity.id),
+				asof=_run_dt,  # AsOf
+				username=entity.username,
+				displayname=entity.displayname,
+				created_at=entity.created,
+				followers_count=entity.followersCount,
+				friends_count=entity.friendsCount,
+				statuses_count=entity.statusesCount,
+				listed_count=entity.listedCount,
+				media_count=entity.mediaCount,
+				last_tweeted=last_tweeted,
+				blue=entity.blue,
+				protected=entity.protected,
+				verified=entity.verified,
+				description=entity.rawDescription,
+				# label=entity.label.description,
+				location=entity.location,
+				url=url,
+				image_url=entity.profileImageUrl,
+				banner_url=entity.profileBannerUrl,
+			)
+			fetched_ids.append(good_id)
+			do_nothing()
+		except snscrape.base.ScraperException as e:
+			msg = " ".join(
+				[
+					f"{lineno+count+1:5d}) {user_id:19d} {e}",
+					f"https://twitter.com/intent/user?user_id={user_id}",
+				]
+			)
+			logger.warning(msg)
+			# snoozer(MIN_ERROR_DELAY, MAX_ERROR_DELAY)
+	return fetched_ids
 
 
 def find_logging_config() -> str | None:
@@ -137,9 +236,8 @@ def find_logging_config() -> str | None:
 
 def get_cached_users(user_ids):
 	user_ids = sorted(user_ids)
-	tablename = "dt_user_history"
+	tablename = "dt_user"
 	columns = [
-		"id",
 		"user_id",
 		"asof",
 		"username",
@@ -153,12 +251,11 @@ def get_cached_users(user_ids):
 	]
 	where_clause = "asof > :since"
 	order_by = "asof DESC"
-	params = {"since": (_run_dt.replace(microsecond=0) - timedelta(days=1))}
+	params = {"since": (_run_dt.replace(microsecond=0) - timedelta(days=CACHE_DAYS))}
 	sql = f"SELECT * FROM {tablename} WHERE {where_clause} ORDER BY {order_by};"
 	with engine.connect() as conn:
-		if schema:
-			setschema = f"SET search_path TO {schema},public;"
-			conn.execute(text(setschema))
+		setschema = f"SET search_path TO {schema},public;"
+		conn.execute(text(setschema))
 
 		where_conditions = [
 			"user_id IN (%s)" % stringify(user_ids),
@@ -185,19 +282,21 @@ def get_cached_user_ids(user_ids):
 	user_ids = sorted(user_ids)
 	cached_user_ids = []
 	with engine.connect() as conn:
-		tablename = "dt_user_history"
-		if schema:
-			setschema = f"SET search_path TO {schema},public;"
-			conn.execute(text(setschema))
-		params = {"yesterday": (_run_dt.replace(microsecond=0) - timedelta(days=7))}
+		tablename = "dt_user"
+		setschema = f"SET search_path TO {schema},public;"
+		conn.execute(text(setschema))
+		params = {
+			"since": (_run_dt.replace(microsecond=0) - timedelta(days=CACHE_DAYS))
+		}
 		# Columns: ['user_id', 'asof', 'screen_name', 'name', 'created_at', 'default_profile_image', 'protected', 'followers_count', 'friends_count', 'listed_count', 'statuses_count', 'last_tweet']
 		where_conditions = [
-			"asof > :yesterday",
+			"user_id IN (%s)" % stringify(user_ids),
+			"asof > :since",
 		]
 		where_clause = " AND ".join(where_conditions)
 		orderby_clause = "user_id"
 		sql = f"SELECT DISTINCT user_id FROM {tablename} WHERE {where_clause} ORDER BY {orderby_clause};"
-		logger.info(sql)
+		# logger.info(sql)
 		for row in conn.execute(text(sql), params).fetchall():
 			cached_user_ids.append(row[0])
 		row_count = len(cached_user_ids)
@@ -206,6 +305,25 @@ def get_cached_user_ids(user_ids):
 
 
 def get_follower_ids(user_id=None, screen_name=None):
+	return load_ids(id_type="follower", user_id=user_id, screen_name=screen_name)
+
+
+def load_account_info(screen_name: str) -> dict:
+	"""
+	- Retrieves account information from Twitter data archive
+	- Uses timestamp of the archive to obtain 'asof' date
+	"""
+	acct_dict = {}
+	filename = twitter_data_dir / f"{screen_name}" / "data" / f"account.js"
+	asof = datetime.fromtimestamp(getmtime(filename)).astimezone()
+	with open(filename) as fp:
+		data = fp.read().lstrip("window.YTD.account.part0 = ")
+		acct_dict = json.loads(data)[0]["account"]
+	acct_dict.update({"asof": asof})
+	return acct_dict
+
+
+def load_follower_ids(user_id=None, screen_name=None):
 	return load_ids(id_type="follower", user_id=user_id, screen_name=screen_name)
 
 
@@ -225,19 +343,10 @@ def load_ids(id_type, user_id=None, screen_name=None):
 		raise ValueError(
 			"Invalid id_type.  Valid types: blocked, follower, friend, or muted"
 		)
-	if id_type in ["friend", "following"]:
-		filename = data_dir / f"{screen_name}_following.js"
-	elif id_type == "follower":
-		pass
-	elif id_type == "blocked":
-		pass
-	elif id_type == "muted":
-		pass
-	else:
-		# This shouldn't happen
-		raise ValueError(
-			"Invalid id_type.  Valid types: blocked, follower, friend, or muted"
-		)
+	if id_type == "friend":
+		id_type = "following"
+	# filename = data_dir / f"{screen_name}_following.js"
+	filename = twitter_data_dir / f"{screen_name}" / "data" / f"{id_type}.js"
 	friendly_id_type = str(id_type).capitalize()
 	# fn_logger = logging.getLogger("%s.get_%s_ids" % (__module__, id_type))
 	logger.info(f"Filename: {filename}")
@@ -250,124 +359,12 @@ def load_ids(id_type, user_id=None, screen_name=None):
 	return ids
 
 
-def get_users(user_ids, csv, database, lineno=0):
-	user_ids = sorted(user_ids)
-	# shuffle(user_ids)
-	max_tweets = 1
-	rows = []
-	tweets = []
-	idlers = []
-	for count, user_id in enumerate(user_ids):
-		if count > 0:
-			sleep(uniform(3.3333, 7.7777))
-		retries = 3
-		while retries > 0:
-			flag_list = []
-			munched_tweet = None
-			i, tweet = -1, None
-			try:
-				for i, tweet in enumerate(
-					sntwitter.TwitterUserScraper(user_id).get_items()
-				):
-					if i == max_tweets:
-						break
-					munched_tweet = Munch.fromDict(tweet)
-					tweets.append(tweet)
-				if munched_tweet:
-					username = munched_tweet.user.username
-					followers_count = munched_tweet.user.followersCount
-					if followers_count < 100:
-						flag_list.append("100")
-					elif followers_count < 1000:
-						flag_list.append("1000")
-					tweet_date = munched_tweet.date
-					if (_run_dt - tweet_date).days > 365:
-						flag_list.append("IDLE")
-						idlers.append(username)
-
-					flags = ",".join(flag_list)
-					msg = " ".join(
-						[
-							f"{lineno+count+1:5d})",
-							f"{user_id:19d}",
-							f"{username:16s}",
-							f"{followers_count:12,d}",
-							f"{tweet_date}",
-							f"{flags}",
-						]
-					)
-					# msg = f"{count+1:5d}) {user_id:19d} {username:16s} {followers_count:9,d} {tweet_date}"
-					logger.info(msg)
-					# print(f"%2d) @%-16s %s" % (count+1, munched_tweet.user.username, '{:9,d}'.format(munched_tweet.user.followersCount)))
-					row = (
-						int(munched_tweet.user.id),
-						_run_dt,
-						munched_tweet.user.username,
-						munched_tweet.user.displayname,
-						munched_tweet.user.created,
-						munched_tweet.user.followersCount,
-						munched_tweet.user.friendsCount,
-						munched_tweet.user.statusesCount,
-						munched_tweet.date,
-					)
-					rows.append(row)
-				else:
-					# Protected or shadow-banned account
-					msg = " ".join(
-						[
-							f"{lineno+count+1:5d})",
-							f"{user_id:19d}",
-							f"No tweets",
-							f"https://twitter.com/intent/user?user_id={user_id}",
-						]
-					)
-					logger.warning(msg)
-					do_nothing()
-				retries = -1
-			except snscrape.base.ScraperException as e:
-				retries -= 1
-				if retries == 0:
-					continue
-				else:
-					logger.warning(f"User ID: {user_id}: {e}  Retries: {retries}")
-					snoozer(395, 405)
-	columns = [
-		"user_id",
-		"asof",
-		"username",
-		"displayname",
-		"created_at",
-		"followers_count",
-		"friends_count",
-		"statuses_count",
-		"last_tweeted",
-	]  # , 'listed_count'
-	df = pd.DataFrame(sorted(rows), columns=columns)
-	df.set_index(
-		[
-			"user_id",
-			"asof",
-		],
-		inplace=True,
-	)
-	if DEBUG:
-		print(df.columns)
-		print(tabulate(df))
-		do_nothing()
-	if database:
-		tablename = "dt_user_history"
-		db_rows = df.to_sql(tablename, con=engine, if_exists="append", schema=schema)
-	if csv:
-		subdir = cache_dir / f"{_run_dt.year}" / f"{_run_dt.month:02d}"
-		subdir.mkdir(parents=True, exist_ok=True)
-		cfilename = subdir.joinpath("whoami_%s.csv.xz" % _fdatetime)
-		df.reset_index()
-		df.to_csv(cfilename, header=columns, index=False)
-	if idlers:
-		logger.info("*** Idlers ***")
-		for i, idler in enumerate(idlers):
-			logger.info(f"{i+1:3d} {idler}")
-	return rows
+def load_ignored_user_ids():
+	ids = []
+	filename = twitter_data_dir / "ignore_user_ids.txt"
+	with open(filename) as fp:
+		ids = [x.rstrip() for x in fp.readlines()]
+	return ids
 
 
 def idle(last_tweeted):
@@ -381,12 +378,72 @@ def idle(last_tweeted):
 	return _run_utc - last_tweeted
 
 
+def insert_user(
+	user_id,
+	asof,
+	username,
+	displayname,
+	created_at,
+	followers_count=None,
+	friends_count=None,
+	listed_count=None,
+	media_count=None,
+	statuses_count=None,
+	last_tweeted=None,
+	blue=None,
+	protected=None,
+	verified=None,
+	default_profile=None,
+	description=None,
+	label=None,
+	location=None,
+	url=None,
+	image_url=None,
+	banner_url=None,
+) -> int | None:
+	seen_id = None
+	params_dict = {
+		"in_user_id": user_id,
+		"asof": asof,
+		"username": username,
+		"displayname": displayname,
+		"created_at": created_at,
+		"followers_count": followers_count,
+		"friends_count": friends_count,
+		"listed_count": listed_count,
+		"media_count": media_count,
+		"statuses_count": statuses_count,
+		"last_tweeted": last_tweeted,
+		"blue": blue,
+		"protected": protected,
+		"verified": verified,
+		"default_profile": default_profile,
+		"description": description,
+		"label": label,
+		"location": location,
+		"url": url,
+		"image_url": image_url,
+		"banner_url": banner_url,
+	}
+	params_list = ",".join([f":{x}" for x in params_dict.keys()])
+	sql = f"SELECT * FROM fn_user_insert({params_list});"
+	with engine.begin() as conn:
+		setschema = f"SET search_path TO {schema},public;"
+		conn.execute(text(setschema))
+		seen_id = conn.execute(text(sql), params_dict).fetchone()[0]
+		do_nothing()
+	return seen_id
+
+
 def load_ids_file(id_type, id_key, filename):
 	ids = []
-	with open(filename) as infile:
-		data = json.load(infile)
+	with open(filename) as fp:
+		# data = json.load(infile)
+		data = fp.read().lstrip(f"window.YTD.{id_type}.part0 = ")
+		ids_dict = json.loads(data)
+
 	do_nothing()
-	for item in data:
+	for item in ids_dict:
 		if id_type in item:
 			if id_key in item[id_type]:
 				acct_id = item[id_type][id_key]
@@ -452,6 +509,147 @@ def stringify(iterable, separator=","):
 	return iterable
 
 
+# ToDo: Change database function(s) to handle follow/unfollow, block/unblock, and mute/unmute operations
+def update_relations(
+	user_id: int, asof: datetime, follower_ids: list, following_ids: list
+):
+	"""
+	Updates dt_relation; Both acct_id and user_id must exist in dt_user, beforehand
+	"""
+	if not follower_ids and not following_ids:
+		raise ValueError("Nothing to process")
+	# ToDo: Follower IDs
+	# Following IDs
+	with engine.begin() as conn:
+		setschema = f"SET search_path TO {schema},public;"
+		conn.execute(text(setschema))
+		# Columns: user_id1, user_id2, asof, follows, blocked, muted
+		cols = "".join(
+			[
+				"user_id1",
+				"user_id2",
+				"asof",
+				"follows",
+				"blocked",
+				"muted",
+			]
+		)
+		params = {
+			"user_id1": user_id,
+			"asof": asof,
+		}
+		for following_id in following_ids:
+			params.update({
+				"follows": True,
+				"blocked": None,
+				"muted": None,
+			})
+			sql = "SELECT * FROM fn_insert_relation(:user_id1, :asof, :follows);"
+			result = conn.execute(text(sql), params)
+			do_nothing()
+
+		# ToDo: Process User IDs no longer related
+
+	return
+
+
+def update_relations_old(
+	acct_id: int, asof: datetime, follower_ids: list | set, following_ids: list | set
+):
+	"""
+	Updates dt_relation; Both acct_id and user_id must exist in dt_user, beforehand
+	"""
+	if not follower_ids and not following_ids:
+		raise ValueError("Nothing to process")
+	with engine.begin() as conn:
+		setschema = f"SET search_path TO {schema},public;"
+		conn.execute(text(setschema))
+		# Fix #1 Follower IDs
+		if follower_ids:
+			setcols = ",".join(
+				[
+					"is_followed_by = false",
+					"asof = :asof",
+				]
+			)
+			where_conditions = [
+				"acct_id = :acct_id",
+				"user_id NOT IN (%s)" % stringify(follower_ids),
+			]
+			where_clause = " AND ".join(where_conditions)
+			params = {"acct_id": acct_id, "asof": asof}
+			sql = f"UPDATE dt_relation SET {setcols} WHERE {where_clause};"
+			result = conn.execute(text(sql), params)
+			do_nothing()
+
+		# Fix #2 Following IDs
+		if following_ids:
+			setcols = ",".join(
+				[
+					"is_following = false",
+					"asof = :asof",
+				]
+			)
+			where_conditions = [
+				"acct_id = :acct_id",
+				"user_id NOT IN (%s)" % stringify(following_ids),
+			]
+			where_clause = " AND ".join(where_conditions)
+			params = {"acct_id": acct_id, "asof": asof}
+			sql = f"UPDATE dt_relation SET {setcols} WHERE {where_clause};"
+			result = conn.execute(text(sql), params)
+			do_nothing()
+	##########
+	user_ids = sorted(list(set(following_ids + follower_ids)))
+	values = []
+	# Accounts that follow each other
+	mutual_ids = sorted(list(set(follower_ids).intersection(set(following_ids))))
+	# Accounts that follow, but not followed-back
+	groupie_ids = sorted(list(set(follower_ids) - set(following_ids)))
+	# Accounts being followed but don't follow-back
+	leader_ids = sorted(list(set(following_ids) - set(follower_ids)))
+	# Add to database
+	tablename = "dt_relation"
+	# acct_id, user_id, asof, is_following, is_followed_by
+	cols_list = [
+		"acct_id",
+		"user_id",
+		"asof",
+		"is_following",
+		"is_followed_by",
+	]
+	cols = ",".join(cols_list)
+	param_list = ",".join([f":{x}" for x in cols_list])
+
+	for user_id in user_ids:
+		is_followed_by = is_following = False
+		if user_id in follower_ids:
+			is_followed_by = True
+		if user_id in following_ids:
+			is_following = True
+		row = (acct_id, user_id, asof, is_following, is_followed_by)
+		params_dict = {
+			"acct_id": acct_id,
+			"user_id": user_id,
+			"asof": asof,
+			"is_following": is_following,
+			"is_followed_by": is_followed_by,
+		}
+		values.append(params_dict)
+	sql = " ".join(
+		[
+			f"INSERT INTO {tablename} ({cols})",
+			f"VALUES ({param_list})",
+			f"ON CONFLICT (acct_id, user_id) DO NOTHING;",
+		]
+	)
+	with engine.begin() as conn:
+		setschema = f"SET search_path TO {schema},public;"
+		conn.execute(text(setschema))
+		conn.execute(text(sql), values)
+	return
+
+
 def do_nothing():
 	pass
 
@@ -471,63 +669,41 @@ if __name__ == "__main__":
 	with open(find_logging_config(), "r") as cfgfile:
 		log_cfg = yaml.safe_load(cfgfile.read())
 	logging.config.dictConfig(log_cfg)
+	logging.basicConfig(level=logging.DEBUG)
 	coloredlogs.install(fmt=log_cfg["formatters"]["simple"]["format"])
+	coloredlogs.set_level(logging.DEBUG)
 	logger = logging.getLogger("")
-	# logger.setLevel(LOG_LEVEL)
-	# fn_logger = logging.getLogger(__module__)
-
-	# Configure logging (OLD)
-	"""FILENAME_SUFFIX = Config.FILENAME_SUFFIX
-	if not FILENAME_SUFFIX:
-		fname = "%s.log" % __module__
-	else:
-		fname = "%s-%s.log" % (__module__, FILENAME_SUFFIX)
-	logfilename = join(Config.LOG_DIR, fname)
-	file_handler = RotatingFileHandler(
-		logfilename, maxBytes=9 * 1024**2, backupCount=9
-	)
-	logging.basicConfig(
-		level=LOG_LEVEL,
-		format="%(asctime)s %(name)-30s %(levelname)-8s %(message)s",
-		datefmt="%Y-%m-%d %H:%M:%S%z",
-		handlers=[
-			file_handler,
-		],
-	)
-	# define a Handler which writes INFO messages or higher to the sys.stderr
-	console = logging.StreamHandler()
-	console.setLevel(logging.DEBUG)
-	# set a format which is simpler for console use
-	formatter = logging.Formatter("%(name)-28s: %(levelname)-8s %(message)s")
-	# tell the handler to use this format
-	console.setFormatter(formatter)
-	# add the handler to the root logger
-	logging.getLogger("").addHandler(console)"""
 
 	# Configure File System Stuff
 	cache_dir = Config.CACHE_DIR
 	data_dir = Config.DATA_DIR
 	report_dir = Config.REPORT_DIR
 	acct_cache = Config.ACCT_CACHE
+	twitter_data_dir = Config.TWITTER_DATA_DIR
 	user_cache = Config.USER_CACHE
 
 	# Database Stuff
-	DATABASE_URL = Config.DATABASE_URL
-	if DATABASE_URL:
-		# Connect to database
-		engine = create_engine(Config.DATABASE_URL, echo=False)
-		schema = Config.DB_SCHEMA
+	# DATABASE_URL = Config.DATABASE_URL
+	db_url = Config.SQLALCHEMY_DATABASE_URI
+	# Connect to database
+	engine = create_engine(db_url, echo=False)
+	schema = Config.DB_SCHEMA
 
 	# Direct Message Recipient (ie. me)
 	DM_RECIPIENT_ID = Config.DM_RECIPIENT_ID
 
 	# Tweet-related Configuration
+	CACHE_DAYS = Config.CACHE_DAYS
 	MIN_BATCH_DELAY, MAX_BATCH_DELAY = Config.BATCH_DELAY_RANGE
+	MIN_ERROR_DELAY, MAX_ERROR_DELAY = Config.ERROR_DELAY_RANGE
 	MIN_SEARCH_DELAY, MAX_SEARCH_DELAY = Config.SEARCH_DELAY_RANGE
 
 	NEW_FRIEND_LIMIT = Config.NEW_FRIEND_LIMIT
 	MIN_LISTED_COUNT = Config.MIN_LISTED_COUNT
 	MIN_STATUS_COUNT = Config.MIN_STATUS_COUNT
+
+	# Testing Stuff
+	TEST_MAX_USERS = Config.TEST_MAX_USERS
 
 	init()
 	main(standalone_mode=False)

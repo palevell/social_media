@@ -2,6 +2,8 @@
 
 BEGIN;
 
+SET search_path TO development;
+
 SELECT 1/COUNT(*) proacl FROM pg_proc WHERE proname='fn_user_insert';
 
 ROLLBACK;

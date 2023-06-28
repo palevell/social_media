@@ -1,17 +1,99 @@
-#+TITLE:	AcctMaint-2023 Research
+#+TITLE:	Account Maintenance Research (2023)
 #+SUBTITLE:	Log
 #+DATE:		2023-06-09 05:39:10-04:00
-#+LASTMOD: 2023-06-22 05:50:40-0400 (EDT)
+#+LASTMOD: 2023-06-28 07:13:46-0400 (EDT)
 #+OPTIONS:	toc:nil num:nil
 #+STARTUP:	indent show3levels
 #+CATEGORIES[]:	Research
 #+TAGS[]:	log python sql sqitch twitter snscrape socialmedia
 
-* Thursday, June 22, 2023
+* Wednesday, June 28, 2023
+** Rework: User Insert Function, Forward
 :LOGBOOK:
-CLOCK: [2023-06-22 Thu 05:45]
+CLOCK: [2023-06-28 Wed 07:00]
 :END:
+*** Bit Fields, Bitwise Operators
+
+* Tuesday, June 27, 2023
+** Rework: User Insert Function, Forward
+:LOGBOOK:
+CLOCK: [2023-06-27 Tue 10:00]--[2023-06-27 Tue 13:00] =>  3:00
+CLOCK: [2023-06-27 Tue 07:30]--[2023-06-27 Tue 09:00] =>  1:30
+:END:
+1. Rollback to ~dt_user_history~
+2. ~fn_user_history~: Add change-detection logic
+3. 
+
+* Monday, June 26, 2023
+** User Relationship Table and Logic
+:LOGBOOK:
+CLOCK: [2023-06-26 Mon 23:00]--[2023-06-27 Tue 01:30] =>  2:30
+CLOCK: [2023-06-26 Mon 16:00]--[2023-06-26 Mon 18:00] =>  2:00
+CLOCK: [2023-06-26 Mon 07:00]--[2023-06-26 Mon 12:00] =>  5:00
+:END:
+*** Issue: Double Entries
+- After deploying ~dt_relation~, I realized that each user relationship would have two entries in the table
+- for a small set of users, this doesn't seem like a big deal, but as I try to resolve other issues (like ~snscrape~ retrieving no data for a specific user), I am re-thinking this
+*** ROLLBACK: User Relation and Related History Table
+- ~sqitch~ doesn't seem to have a ~remove~ command, to undo an ~add~ command (~sqitch.plan~)
+*** Solution: User Follows Table
+- Instead of having key pairs with ~is_follower~/~is_followed_by~ attributes, only store ~is_follower~
+- Since user relationships are initiated by the act of "following", this is all that needs to be stored
+- In this example:
+  * user 123 follows users 456 and 789, and they follow-back
+  * user 789 follows users 123 and 456, but only 123 follows back
+  * user 456 only follows user 123, who follows back, and is also followed by user 789
+  |     id | user1 | user2 | follows |
+  |--------+-------+-------+---------|
+  | 100001 |   123 |   456 | true    |
+  | 100002 |   123 |   789 | true    |
+  | 100003 |   456 |   123 | true    |
+  | 100004 |   789 |   123 | true    |
+  | 100005 |   789 |   456 | true    |
+*** TODO Move User Relation Code from Python to Database
+- ~update_relation()~ --> ~fn_insert_relation()~ (similar to user insert function)
+- Strange: DBeaver won't run the deploy script
+- I am quite pleased with ~fn_insert_relation()~ because I got it to return the ID of the row that was added
+- I also got the function to check for changes in values by way of the MD5() function
+- Change this function to handle follow/unfollow, block/unblock, and mute/unmute operations
+
+
+* Friday, June 23, 2023
+** Convert VARCHAR columns to TEXT
+:LOGBOOK:
+CLOCK: [2023-06-23 Fri 06:30]--[2023-06-23 Fri 07:00] =>  0:30
+:END:
+** User Relationship Table and Logic
+:LOGBOOK:
+CLOCK: [2023-06-23 Fri 07:15]--[2023-06-23 Fri 12:15] =>  5:00
+:END:
+- After a test-run, it seems that two tables would be better than just the one (~dt_relation~ and ~dt_relation_history~)
+
+
+* Thursday, June 22, 2023
 ** Imported Old Twitter User Data (get-whoami)
+:LOGBOOK:
+CLOCK: [2023-06-22 Thu 05:45]--[2023-06-22 Thu 06:30] =>  0:45
+:END:
+- Note: Table trigger ~trb_user_asof~ has been disabled, not sure if it is needed
+** Relationship Table
+:LOGBOOK:
+CLOCK: [2023-06-22 Thu 06:45]--[2023-06-22 Thu 10:00] =>  3:15
+:END:
+*** Definitions
+- *Groupie:* An account that follows that is not being followed (incoming)
+- *Leader:* An account being followed that is not following (outgoing)
+- *Friend:* Twitter's label for an account being followed (outgoing)
+** Adding Columns to User Tables
+:LOGBOOK:
+CLOCK: [2023-06-22 Thu 21:00]--[2023-06-23 Fri 00:45] =>  3:45
+:END:
+*** Columns to add
+1. Blue (True/False)
+2. Label (Description)
+*** Columns to drop
+- BadgeURL (part of User Label)
+
 * Tuesday, June 20, 2023
 ** SQitch
 :LOGBOOK:

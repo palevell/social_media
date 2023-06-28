@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # new_db.py - Wednesday, June 21, 2023
 """ Testing new database with SQitch """
-__version__ = "0.1.1-dev0"
+__version__ = "0.1.1-dev2"
 
 import os
 import sqlalchemy as sa
@@ -61,18 +61,19 @@ def insert_user(
 	media_count=None,
 	statuses_count=None,
 	last_tweeted=None,
+	blue=None,
 	protected=None,
 	verified=None,
-	has_image_url=None,
+	default_profile=None,
 	description=None,
+	label=None,
 	location=None,
 	url=None,
-	badge_url=None,
 	image_url=None,
 	banner_url=None,
 ):
 	params_dict = {
-		"id": user_id,
+		"in_user_id": user_id,
 		"asof": asof,
 		"username": username,
 		"displayname": displayname,
@@ -83,13 +84,14 @@ def insert_user(
 		"media_count": media_count,
 		"statuses_count": statuses_count,
 		"last_tweeted": last_tweeted,
+		"blue": blue,
 		"protected": protected,
 		"verified": verified,
-		"has_image_url": has_image_url,
+		"default_profile": default_profile,
 		"description": description,
+		"label": label,
 		"location": location,
 		"url": url,
-		"badge_url": badge_url,
 		"image_url": image_url,
 		"banner_url": banner_url,
 	}
@@ -117,9 +119,6 @@ def migrate_ppc_retweets():
 		to_conn.execute(sa.text(sql))
 		sql = "TRUNCATE TABLE dt_user CASCADE;"
 		to_conn.execute(sa.text(sql))"""
-		sql = "ALTER TABLE dt_user DISABLE TRIGGER trb_user_asof;"
-		to_conn.execute(sa.text(sql))
-		to_conn.commit()
 		# Get column names
 		# sql = "SELECT * FROM dt_user_history ORDER BY id LIMIT 0;"
 		# columns = from_conn.execute(sa.text(sql)).keys()
@@ -137,11 +136,11 @@ def migrate_ppc_retweets():
 		]
 		from_cols = ",".join(from_cols_list)
 		params_list = ",".join([f":{x}" for x in from_cols_list])
-		print(f"id  asof  username  created_at  followers_count  last_tweeted")
+		print(f"user_id  asof  username  created_at  followers_count  last_tweeted")
 		from_sql = f"SELECT * FROM dt_user_history ORDER BY id LIMIT {max_rows};"
 		media_count = None
 		for (
-			_id,
+			hist_id,
 			user_id,
 			asof,
 			username,
@@ -154,11 +153,11 @@ def migrate_ppc_retweets():
 			last_tweeted,
 		) in from_conn.execute(sa.text(from_sql)).fetchall():
 			print(
-				f"{_id:19d} {asof} @{username:16s} {created_at} {followers_count:12,d} {last_tweeted}"
+				f"{hist_id:19d} {asof} @{username:16s} {created_at} {followers_count:12,d} {last_tweeted}"
 			)
 			# Note: Parameter names match column names (above)
 			params_dict = {
-				"user_id": user_id,
+				"in_user_id": user_id,
 				"asof": asof,
 				"username": username,
 				"displayname": displayname,

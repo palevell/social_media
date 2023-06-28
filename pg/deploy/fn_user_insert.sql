@@ -8,7 +8,7 @@ BEGIN;
 SET search_path TO development;
 
 CREATE OR REPLACE FUNCTION fn_user_insert (
-	user_id		BIGINT,
+	in_user_id	BIGINT,
 	asof		TIMESTAMPTZ,
 	username	VARCHAR,
 	displayname	VARCHAR,
@@ -19,21 +19,21 @@ CREATE OR REPLACE FUNCTION fn_user_insert (
 	media_count	BIGINT,
 	statuses_count	BIGINT,
 	last_tweeted	TIMESTAMPTZ,
+	blue		BOOLEAN,
 	protected	BOOLEAN,
 	verified	BOOLEAN,
-	has_image_url	BOOLEAN,
+	default_profile	BOOLEAN,
 	description	VARCHAR,
+	label		VARCHAR,
 	location	VARCHAR,
 	url		VARCHAR,
-	badge_url	VARCHAR,
 	image_url	VARCHAR,
 	banner_url	VARCHAR
 ) RETURNS BIGINT LANGUAGE plpgsql AS $$
 BEGIN
-	RAISE NOTICE 'fn_user_insert()';
-	INSERT INTO dt_user VALUES(
-		$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20
-	) ON CONFLICT (id) DO UPDATE
+	INSERT INTO dt_user AS du VALUES(
+		$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21
+	) ON CONFLICT (user_id) DO UPDATE
 	SET asof =		EXCLUDED.asof,
 	    username  =		EXCLUDED.username,
 	    displayname =	EXCLUDED.displayname,
@@ -44,18 +44,20 @@ BEGIN
 	    media_count =	EXCLUDED.media_count,
 	    statuses_count =	EXCLUDED.statuses_count,
 	    last_tweeted =	EXCLUDED.last_tweeted,
+	    blue =		EXCLUDED.blue,
 	    protected =		EXCLUDED.protected,
 	    verified =		EXCLUDED.verified,
-	    has_image_url =	EXCLUDED.has_image_url,
+	    default_profile =	EXCLUDED.default_profile,
 	    description =	EXCLUDED.description,
+	    label =		EXCLUDED.label,
 	    location =		EXCLUDED.location,
 	    url =		EXCLUDED.url,
-	    badge_url =		EXCLUDED.badge_url,
 	    image_url =		EXCLUDED.image_url,
 	    banner_url =	EXCLUDED.banner_url
-        WHERE dt_user.id = EXCLUDED.id
-          AND dt_user.asof < EXCLUDED.asof;
-          -- AND COALESCE(dt_user.last_tweeted, DATE('0001-01-01')) < EXCLUDED.last_tweeted;
+        WHERE du.user_id = EXCLUDED.user_id
+          AND du.statuses_count != EXCLUDED.statuses_count
+          AND du.asof < EXCLUDED.asof
+        RETURNING user_id;
 	RETURN user_id;
 END; $$;
 

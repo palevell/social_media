@@ -5,11 +5,11 @@ BEGIN;
 SET search_path TO development;
 
 -- Verify dt_user_history
-SELECT	id, user_id, username, asof
+SELECT	hist_id, user_id, username, asof
 FROM	dt_user_history
 WHERE	FALSE;
 
--- Verify function fn_user_asof
+-- Verify function fn_user_history
 SELECT has_function_privilege('fn_user_history()', 'execute');
 
 -- Verify trigger

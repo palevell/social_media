@@ -1,7 +1,7 @@
-#+TITLE:	AcctMaint-2023 Research
+#+TITLE:	Account Maintenance Research (2023)
 #+SUBTITLE:	README
 #+DATE:		2023-06-09 05:39:10-04:00
-#+LASTMOD: 2023-06-20 20:49:38-0400 (EDT)
+#+LASTMOD: 2023-06-26 07:10:46-0400 (EDT)
 #+OPTIONS:	toc:nil num:nil
 #+STARTUP:	indent showeverything
 #+CATEGORIES[]:	Research

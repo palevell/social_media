@@ -17,6 +17,7 @@ munch = "*"
 pillow = "*"
 oyaml = "*"
 coloredlogs = "*"
+psycopg-binary = "*"
 psycopg = "*"
 
 [dev-packages]
