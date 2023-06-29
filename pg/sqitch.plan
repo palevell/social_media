@@ -13,5 +13,6 @@ asof_triggers [dt_relation dt_user devschema] 2023-06-24T14:27:32Z Patrick <patr
 # fn_insert_relation [dt_relation dt_user devschema] 2023-06-27T03:07:26Z Patrick <patrick29501@gmx.com> # Add Relation Insert function
 @v1.0.0-dev1 2023-06-27T11:29:26Z Patrick <patrick29501@gmx.com> # Tag v1.0.0-dev1.
 fn_relation [dt_relation dt_user devschema] 2023-06-27T03:07:26Z Patrick <patrick29501@gmx.com> # Add Relation Insert function
+@v1.0.0-dev2 2023-06-28T17:19:25Z Patrick <patrick29501@gmx.com> # Tag v1.0.0-dev2
 @v1.0.0-dev3 2023-06-28T23:30:37Z Patrick <patrick29501@gmx.com> # Tag v1.0.0-dev3
-# @v1.0.0-dev2 2023-06-28T17:19:25Z Patrick <patrick29501@gmx.com> # Tag v1.0.0-dev2
+fn_user_insert [fn_user_insert@v1.0.0-dev3] 2023-06-29T00:16:40Z Patrick <patrick29501@gmx.com> # Fix SQL error

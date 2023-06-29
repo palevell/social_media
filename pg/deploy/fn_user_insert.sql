@@ -30,6 +30,7 @@ CREATE OR REPLACE FUNCTION fn_user_insert (
 	image_url	VARCHAR,
 	banner_url	VARCHAR
 ) RETURNS BIGINT LANGUAGE plpgsql AS $$
+DECLARE returned_user_id BIGINT;
 BEGIN
 	INSERT INTO dt_user AS du VALUES(
 		$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21
@@ -57,8 +58,8 @@ BEGIN
         WHERE du.user_id = EXCLUDED.user_id
           AND du.statuses_count != EXCLUDED.statuses_count
           AND du.asof < EXCLUDED.asof
-        RETURNING user_id;
-	RETURN user_id;
+        RETURNING user_id INTO returned_user_id;
+	RETURN returned_user_id;
 END; $$;
 
 COMMIT;

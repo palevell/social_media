@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # acct_maint.py - Thursday, June 22, 2023
 """ Follow retweeters and unfollow less-active tweeps """
-__version__ = "0.1.3-dev5"
+__version__ = "0.1.4-dev6"
 
 import builtins
 import click
@@ -19,10 +19,11 @@ import snscrape.modules.twitter as sntwitter
 import sys
 from collections import Counter
 from datetime import datetime, timedelta, timezone
+from itertools import cycle
 from logging.handlers import RotatingFileHandler
 from os.path import basename, exists, getmtime, join
 from pathlib import Path
-from random import shuffle, uniform
+from random import choices, shuffle, uniform
 from requests import get
 from tabulate import tabulate
 from time import sleep
@@ -68,6 +69,14 @@ def main(twit):
 		cached_follower_ids = get_cached_user_ids(follower_ids)
 		cached_following_ids = get_cached_user_ids(following_ids)
 
+		# Update friends / following (Cached)
+		if cached_following_ids:
+			update_relations(acct_id, asof, "following", cached_following_ids)
+
+		# Update followers (Cached)
+		if cached_follower_ids:
+			update_relations(acct_id, asof, "follower", cached_follower_ids)
+
 		# Determine which User IDs to fetch (ie. not cached or current)
 		fetch_follower_ids = sorted(list(set(follower_ids) - set(cached_follower_ids)))
 		fetch_following_ids = sorted(
@@ -81,7 +90,8 @@ def main(twit):
 			# Testing
 			if TEST_MAX_USERS:
 				# Shuffle list of IDs to fetch and pick first XXX values
-				shuffle(fetch_user_ids)
+				for _ in range(10):
+					shuffle(fetch_user_ids)
 				fetch_user_ids = fetch_user_ids[:TEST_MAX_USERS]
 				# Reduce following/follower IDs to those in the list, above
 				following_ids = list(
@@ -111,13 +121,15 @@ def main(twit):
 						list(set(following_ids).intersection(set(fetched_ids)))
 					)
 
-					# Update dt_relations
-					update_relations(
-						acct_id,
-						asof,
-						follower_ids=fetched_follower_ids,
-						following_ids=fetched_following_ids,
-					)
+					# Update friends / following (Fetched)
+					if fetched_following_ids:
+						update_relations(acct_id, asof, "following", fetched_following_ids)
+
+					# Update followers (Fetched)
+					if fetched_follower_ids:
+						update_relations(acct_id, asof, "follower", fetched_follower_ids)
+
+					# ToDo: blocked & muted
 					line_number += batch_size
 					do_nothing()
 	return
@@ -133,19 +145,22 @@ def init():
 	if proxy:
 		print(f"ALL_PROXY = {proxy}")
 	# Check IP Address being used
-	check_ip_urls = [
-		"https://httpbin.org/ip",
-		"https://ifconfig.co/ip",
-	]
-	shuffle(check_ip_urls)
-	url = check_ip_urls[0]
-	r = get(url, timeout=(30))
-	try:
-		if r.ok:
-			logger.info(f"IP Address: {r.text.rstrip()} via {url}")
-	except TimeoutError as e:
-		logger.exception(e)
-		do_nothing()
+	check_ip_pool = cycle(Config.MYIP_URLS_HTTPS)
+	retries = 3
+	while retries > 0:
+		try:
+			url = next(check_ip_pool)
+			r = get(url, timeout=(3.05, 30))
+			if r.ok:
+				logger.info(f"IP Address: {r.text.rstrip()} via {url}")
+			retries = -1
+		except Exception as e:
+			retries -=1
+			if retries > 0:
+				logger.warning(e)
+			else:
+				logger.exception(e)
+			do_nothing()
 	return
 
 
@@ -158,7 +173,23 @@ def eoj():
 
 def fetch_users(user_ids: list | set, lineno: int = 0) -> list:
 	fetched_ids = []
-	shuffle(user_ids)
+	no_tweet_ids = []
+	error_ids = []
+
+	# Shuffle list of User IDs
+	user_id_count = len(user_ids)
+	if user_id_count > 50:
+		sorted_ids = sorted(user_ids)
+		top_half = user_ids[:user_id_count]
+		bottom_half = user_ids[user_id_count:]
+		for _ in range(10):
+			shuffle(top_half)
+			shuffle(bottom_half)
+		user_ids = bottom_half + top_half
+	for _ in range(10):
+		shuffle(user_ids)
+
+	# Fetch User IDs
 	for count, user_id in enumerate(user_ids):
 		if count > 0:
 			sleep(uniform(MIN_SEARCH_DELAY, MAX_SEARCH_DELAY))
@@ -178,6 +209,7 @@ def fetch_users(user_ids: list | set, lineno: int = 0) -> list:
 					break
 			if not last_tweeted:
 				# Protected or shadow-banned account?
+				no_tweet_ids.append(user_id)
 				msg = " ".join(
 					[
 						f"{lineno+count+1:5d}) {user_id:19d}",
@@ -212,6 +244,7 @@ def fetch_users(user_ids: list | set, lineno: int = 0) -> list:
 			fetched_ids.append(good_id)
 			do_nothing()
 		except snscrape.base.ScraperException as e:
+			error_ids.append(user_ids)
 			msg = " ".join(
 				[
 					f"{lineno+count+1:5d}) {user_id:19d} {e}",
@@ -220,6 +253,10 @@ def fetch_users(user_ids: list | set, lineno: int = 0) -> list:
 			)
 			logger.warning(msg)
 			# snoozer(MIN_ERROR_DELAY, MAX_ERROR_DELAY)
+	if error_ids:
+		pass
+	if no_tweet_ids:
+		pass
 	return fetched_ids
 
 
@@ -510,43 +547,44 @@ def stringify(iterable, separator=","):
 
 
 # ToDo: Change database function(s) to handle follow/unfollow, block/unblock, and mute/unmute operations
-def update_relations(
-	user_id: int, asof: datetime, follower_ids: list, following_ids: list
-):
+def update_relations(acct_id: int, asof: datetime, relation_type: str, user_ids: list):
 	"""
 	Updates dt_relation; Both acct_id and user_id must exist in dt_user, beforehand
 	"""
-	if not follower_ids and not following_ids:
+	if relation_type not in ['follower', 'following', 'friend', 'blocked', 'muted']:
+		raise ValueError(f"Unrecognized relation type: '{relation_type}'")
+	if not user_ids:
 		raise ValueError("Nothing to process")
 	# ToDo: Follower IDs
-	# Following IDs
+	operation = None
+	if relation_type in ['follower', 'following', 'friend']:
+		operation = 'follow'
+	elif relation_type == 'blocked':
+		operation = 'block'
+	elif relation_type == 'muted':
+		operation = 'mute'
+	else:
+		raise ValueError(f"Unrecognized relation type: '{relation_type}'")
 	with engine.begin() as conn:
 		setschema = f"SET search_path TO {schema},public;"
 		conn.execute(text(setschema))
 		# Columns: user_id1, user_id2, asof, follows, blocked, muted
-		cols = "".join(
-			[
-				"user_id1",
-				"user_id2",
-				"asof",
-				"follows",
-				"blocked",
-				"muted",
-			]
-		)
-		params = {
-			"user_id1": user_id,
-			"asof": asof,
-		}
-		for following_id in following_ids:
-			params.update({
-				"follows": True,
-				"blocked": None,
-				"muted": None,
-			})
-			sql = "SELECT * FROM fn_insert_relation(:user_id1, :asof, :follows);"
-			result = conn.execute(text(sql), params)
+		for user_id in user_ids:
+			params = {
+				"operation": operation,
+				"in_user_id1": acct_id,
+				"in_user_id2": user_id,
+				"asof": asof,
+			}
+			if relation_type == 'follower':
+				params.update({
+					"in_user_id1": user_id,
+					"in_user_id2": acct_id,
+				})
+			sql = "SELECT * FROM fn_relation(:operation, :in_user_id1, :in_user_id2, :asof);"
+			results = conn.execute(text(sql), params)
 			do_nothing()
+
 
 		# ToDo: Process User IDs no longer related
 
