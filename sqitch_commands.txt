@@ -1,0 +1,137 @@
+    492 sqitch deploy
+    336 sqitch status --show-tags
+    265 sqitch revert -y --to @HEAD^
+    100 sqitch revert -y --to @HEAD^^
+     56 sqitch plan -foneline
+     51 sqitch status
+     42 sqitch plan
+     42 sqitch deploy --to=fn_user_insert
+     39 sqitch log
+     36 sqitch log -foneline
+     19 sqitch status --with-tags
+     13 sqitch help log
+     12 sqitch tag v1.0.0-dev2 -n 'Tag v1.0.0-dev2'
+     12 sqitch deploy --to=dt_user_history
+     12 sqitch add fn_issue_history --requires dt_issue --requires devschema -n "Add Issue History function"
+     12 sqitch add fn_insert_issue --requires dt_issue --requires devschema -n "Add Issue INSERT function"
+      9 sqitch config core.pager 'more'
+      9 sqitch config --bool rebase.verify true
+      9 sqitch config --bool deploy.verify true
+      8 sqitch add dt_user --requires devschema -n "Add user table"
+      8 sqitch add devschema -n 'Add development schema'
+      7 sqitch tag v1.0.0-dev2 -n 'Tag v1.0.0-dev2.'
+      7 sqitch tag v1.0.0-dev1 -n 'Tag v1.0.0-dev1.'
+      6 sqitch target add acct_maint db:pg:acct_maint
+      6 sqitch tag v1.0.0-dev4 -n 'Tag v1.0.0-dev4'
+      6 sqitch tag v1.0.0-dev3 -n 'Tag v1.0.0-dev3'
+      6 sqitch status --show-tags -foneline
+      6 sqitch rework fn_user_insert -n 'Fix SQL error'
+      6 sqitch rework dt_relation -n "Change column names"
+      6 sqitch revert -y --to @HEAD^^^
+      6 sqitch revert --to=fn_user_insert
+      6 sqitch revert --to=dt_user_history
+      6 sqitch revert --to=devschema
+      6 sqitch log --help
+      6 sqitch log -fshort
+      6 sqitch init acct_maint_2023 --top-dir pg --uri https://github.com/palevell/social_media --engine pg
+      6 sqitch help plan
+      6 sqitch engine add pg acct_maint
+      6 sqitch deploy -y --to=dt_user
+      6 sqitch deploy to=fn_user_insert
+      6 sqitch deploy --to=dt_user
+      6 sqitch config --user user.name 'Patrick'
+      6 sqitch config --user user.email 'patrick29501@gmx.com'
+      6 sqitch bundle --dest-dir audit_tables-1.0.0-dev2
+      6 sqitch bundle --dest-dir acct_maint-1.0.0-dev4
+      6 sqitch bundle --dest-dir acct_maint-1.0.0-dev3
+      6 sqitch bundle --dest-dir acct_maint-1.0.0-dev2
+      6 sqitch bundle --dest-dir acct_maint-1.0.0-dev1
+      6 sqitch add fn_user_insert --requires dt_user_history --requires dt_user --requires devschema -n "Add insert user function"
+      6 sqitch add fn_issue --requires asof_triggers --requires dt_issue --requires devschema -n "Add functions & triggers for issue tables"
+      6 sqitch add fn_insert_relation --requires dt_relation --requires dt_user --requires devschema -n "Add Relation Insert function"
+      6 sqitch add dt_user_history --requires dt_user --requires devschema -n "Add User History table"
+      6 sqitch add dt_relation --requires dt_user --requires devschema -n "Add Relation Table"
+      6 sqitch add dt_relation_history --requires dt_relation --requires dt_user --requires devschema -n "Add Relation History Table"
+      6 sqitch add dt_issue --requires devschema -n "Add Issue-Tracking Table"
+      6 sqitch add dt_auth_user --requires dt_user --requires devschema -n "Add Authorized User Table"
+      6 sqitch add asof_triggers --requires dt_relation --requires dt_user --requires devschema -n "Add Authorized User Table"
+      5 sqitch verify
+      4 sqitch revert
+      3 sqitch status db:pg:flipr_test
+      3 sqitch config --user user.name 'iPad Guy'
+      3 sqitch config --user user.email 'ipad.guy.100@gmx.com'
+      2 sqitch verify db:pg:flipr_test
+      2 sqitch target add audit_tables db:pg:audit_tables
+      2 sqitch tag v1.0.0-dev1 -n 'Tag v1.0.0-dev1'
+      2 sqitch init flipr --uri https://github.com/iPadGuy/sqitch-into --engine pg
+      2 sqitch help init
+      2 sqitch help add
+      2 sqitch engine add pg audit_tables
+      2 sqitch deploy --to dt_user
+      2 sqitch deploy --registry test
+      2 sqitch bundle --dest-dir audit_tables-1.0.0-dev1
+      2 sqitch add fn_insert_user --requires dt_user_triggers --requires dt_user_history --requires dt_user --requires devschema -n "Add insert_user function"
+      2 sqitch add dt_user_history --requires dt_user --requires devschema -n "Add user_history table"
+      2 lg -d $(locate -be sqitch | grep -v Backups) | tail -25
+      1 sqitch target show prod-primary prod-standby
+      1 sqitch target show
+      1 sqitch target add flipr_test db:pg:flipr_test
+      1 sqitch target add audit_tables dg:pg:audit_tables
+      1 sqitch target
+      1 sqitch status db:pg:flipr_dev
+      1 sqitch rework insert_user --requires pgcrypto -n 'Change insert_user to use pgcrypto.'
+      1 sqitch rework change_pass --requires pgcrypto -n 'Change change_pass to use pgcrypto.'
+      1 sqitch revert --to @HEAD^^ -y
+      1 sqitch revert --to @HEAD^ -y
+      1 sqitch revert db:pg:flipr_test
+      1 sqitch log db:pg:flipr_test
+      1 sqitch init flipr --uri https://github.com/iPadGuy/AuditTables --engine pg
+      1 sqitch init audit_tables --top-dir sqitch --uri https://github.com/iPadGuy/AuditTables --engine pg
+      1 sqitch help deploy
+      1 sqitch engine show pg
+      1 sqitch engine alter pg --registry test
+      1 sqitch engine add pg flipr_test
+      1 sqitch deploy --verify db:pg:flipr_test
+      1 sqitch deploy db:pg:flipr_test
+      1 sqitch deploy db:pg:flipr_prod
+      1 sqitch deploy db:pg:flipr_dev
+      1 sqitch config --user --list
+      1 sqitch config --system --list
+      1 sqitch config --local --list
+      1 sqitch config --list
+      1 sqitch config
+      1 sqitch commands
+      1 sqitch bundle --dest-dir flipr-1.0.0-dev2
+      1 sqitch bundle
+      1 sqitch add users --requires appschema -n 'Creates table to track our users.'
+      1 sqitch add pgcrypto --requires appschema -n "Adds pgcrypto extention to the database"
+      1 sqitch add pgcrypto -n "Adds pgcrypto extention to the database"
+      1 sqitch add insert_user --requires users --requires appschema   -n 'Creates a function to insert a user.'
+      1 # sqitch add insert_flip --requires --users --appschema
+      1 sqitch add insert_flip --requires flips --requires appschema -n "Crates a function to insert a flip"
+      1 sqitch add insert_flip --requires --flips --requires appschema -n "Crates a function to insert a flip"
+      1 sqitch add insert_flip --requires --flips --appschema -n "Crates a function to insert a flip"
+      1 sqitch add insert_flip --requires --flips --appschema -n "Crates a function to insert a flip
+      1 sqitch add insert_flip --change --requires flips --requires users --requires appschema -n "Crates a function to insert a flip"
+      1 sqitch add flips -r appschema -r users -n 'Adds table for storing flips.'
+      1 sqitch add dt_user_triggers --requires dt_user_history --requires dt_user --requires devschema -n "Add table triggers to dt_user"
+      1 sqitch add dt_user --requires devschema -n "Add user table
+      1 sqitch add delete_flip --requires flips --requires users --requires appschema -n "Crates a function to delete a flip"
+      1 sqitch add delete_flip --requires flips --requires appschema -n "Crates a function to delete a flip"
+      1 sqitch add change_pass --requires users --requires appschema   -n 'Creates a function to change a user password.'
+      1 sqitch add --change insert_flip --requires flips --requires users --requires appschema -n "Crates a function to insert a flip" ; sqitch add insert_flip --change --requires flips --requires users --requires appschema -n "Crates a function to insert a flip"
+      1 sqitch add --change insert_flip --requires flips --requires users --requires appschema -n "Crates a function to insert a flip"
+      1 sqitch add appschema -n 'Add schema for all flipr objects.'
+      1 rsync -ahv ../AuditTables~/sqitch .
+      1 lg -d $(locate -be sqitch | grep -v Backkups) | tail -25
+      1 lg -d $(locate -bei sqitch | grep -v Backups) | tail -25
+      1 grep 'sqitch ' ~/.bash_hist* | wc -l
+      1 grep 'sqitch ' ~/.bash_hist* | sort | uniq -c | wc -l
+      1 grep 'sqitch ' ~/.bash_hist* | sort | uniq -c | sort -rn | less -S
+      1 grep -h 'sqitch ' ~/.bash_hist* | sort | uniq -c | wc -l
+      1 grep -h 'sqitch ' ~/.bash_hist* | sort | uniq -c | sort -rn | less -S
+      1 find sqitch -name 'dt_user*sql' -execdir rename s,$,~, "{}" \;
+      1 find sqitch -name 'dt_user.sql*'
+      1 find sqitch -name 'dt_user*sql*'
+      1 find sqitch -name 'dt_user*sql'
+      1 ack sqitch LOG.org

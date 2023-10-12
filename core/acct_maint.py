@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # acct_maint.py - Thursday, June 22, 2023
 """ Follow retweeters and unfollow less-active tweeps """
-__version__ = "0.1.4-dev6"
+__version__ = "0.1.5-dev3"
 
 import builtins
 import click
@@ -77,11 +77,17 @@ def main(twit):
 		if cached_follower_ids:
 			update_relations(acct_id, asof, "follower", cached_follower_ids)
 
+		# Find User IDs with issues
+		bad_follower_ids = get_bad_user_ids(follower_ids)
+		bad_following_ids = get_bad_user_ids(following_ids)
+
 		# Determine which User IDs to fetch (ie. not cached or current)
-		fetch_follower_ids = sorted(list(set(follower_ids) - set(cached_follower_ids)))
-		fetch_following_ids = sorted(
-			list(set(following_ids) - set(cached_following_ids))
-		)
+		fetch_follower_ids = sorted(list(
+				set(follower_ids) - set(cached_follower_ids) - set(bad_follower_ids)
+		))
+		fetch_following_ids = sorted(list(
+			set(following_ids) - set(cached_following_ids) - set(bad_following_ids)
+		))
 		# Eliminate duplicates
 		fetch_user_ids = sorted(list(set(fetch_following_ids + fetch_follower_ids)))
 		logger.info(f"User IDs to fetch: {len(fetch_user_ids):,d}")
@@ -123,11 +129,15 @@ def main(twit):
 
 					# Update friends / following (Fetched)
 					if fetched_following_ids:
-						update_relations(acct_id, asof, "following", fetched_following_ids)
+						update_relations(
+							acct_id, asof, "following", fetched_following_ids
+						)
 
 					# Update followers (Fetched)
 					if fetched_follower_ids:
-						update_relations(acct_id, asof, "follower", fetched_follower_ids)
+						update_relations(
+							acct_id, asof, "follower", fetched_follower_ids
+						)
 
 					# ToDo: blocked & muted
 					line_number += batch_size
@@ -155,7 +165,7 @@ def init():
 				logger.info(f"IP Address: {r.text.rstrip()} via {url}")
 			retries = -1
 		except Exception as e:
-			retries -=1
+			retries -= 1
 			if retries > 0:
 				logger.warning(e)
 			else:
@@ -175,6 +185,7 @@ def fetch_users(user_ids: list | set, lineno: int = 0) -> list:
 	fetched_ids = []
 	no_tweet_ids = []
 	error_ids = []
+	consecutive_error_count = 0
 
 	# Shuffle list of User IDs
 	user_id_count = len(user_ids)
@@ -218,6 +229,7 @@ def fetch_users(user_ids: list | set, lineno: int = 0) -> list:
 					]
 				)
 				logger.warning(msg)
+				insert_issue(user_id, _run_dt,False,True,False,msg)
 			logger.debug(f"{lineno+count+1:5d}) {user_id:19d} Adding to database . . .")
 			good_id = insert_user(
 				user_id=int(entity.id),
@@ -242,9 +254,11 @@ def fetch_users(user_ids: list | set, lineno: int = 0) -> list:
 				banner_url=entity.profileBannerUrl,
 			)
 			fetched_ids.append(good_id)
+			consecutive_error_count = 0
 			do_nothing()
 		except snscrape.base.ScraperException as e:
-			error_ids.append(user_ids)
+			consecutive_error_count += 1
+			error_ids.append(user_id)
 			msg = " ".join(
 				[
 					f"{lineno+count+1:5d}) {user_id:19d} {e}",
@@ -252,11 +266,17 @@ def fetch_users(user_ids: list | set, lineno: int = 0) -> list:
 				]
 			)
 			logger.warning(msg)
-			# snoozer(MIN_ERROR_DELAY, MAX_ERROR_DELAY)
-	if error_ids:
-		pass
-	if no_tweet_ids:
-		pass
+			if "failed, giving up" in e.args:
+				insert_issue(user_id, _run_dt, True, False, False, msg)
+			elif "Response" in e.args:
+				insert_issue(user_id, _run_dt, True, False, False, msg)
+			elif "User" in e.args:
+				insert_issue(user_id, _run_dt, False, False, True, msg)
+			else:
+				insert_issue(user_id, _run_dt, False, False, False, msg)
+			if consecutive_error_count == 25:
+				raise Exception("Too many errors.  Aborting.")
+		# snoozer(MIN_ERROR_DELAY, MAX_ERROR_DELAY)
 	return fetched_ids
 
 
@@ -341,6 +361,32 @@ def get_cached_user_ids(user_ids):
 	return cached_user_ids
 
 
+def get_bad_user_ids(user_ids):
+	user_ids = sorted(user_ids)
+	bad_user_ids = []
+
+	with engine.connect() as conn:
+		tablename = "dt_issue"
+		setschema = f"SET search_path TO {schema},public;"
+		conn.execute(text(setschema))
+		params = {
+			"since": (_run_dt.replace(microsecond=0) - timedelta(days=CACHE_DAYS))
+		}
+		# Columns: ['user_id', 'asof', 'screen_name', 'name', 'created_at', 'default_profile_image', 'protected', 'followers_count', 'friends_count', 'listed_count', 'statuses_count', 'last_tweet']
+		where_conditions = [
+			"user_id IN (%s)" % stringify(user_ids),
+			"asof > :since",
+		]
+		where_clause = " AND ".join(where_conditions)
+		orderby_clause = "user_id"
+		sql = f"SELECT DISTINCT user_id FROM {tablename} WHERE {where_clause} ORDER BY {orderby_clause};"
+		# logger.info(sql)
+		for row in conn.execute(text(sql), params).fetchall():
+			bad_user_ids.append(row[0])
+		row_count = len(bad_user_ids)
+	return bad_user_ids
+
+
 def get_follower_ids(user_id=None, screen_name=None):
 	return load_ids(id_type="follower", user_id=user_id, screen_name=screen_name)
 
@@ -413,6 +459,33 @@ def idle(last_tweeted):
 	if not last_tweeted.tzinfo:
 		last_tweeted.replace(tzinfo=timezone.utc)
 	return _run_utc - last_tweeted
+
+
+def insert_issue(
+	user_id: int,
+	asof: datetime,
+	no_response: bool,
+	no_tweets: bool,
+	no_user: bool,
+	message: str,
+) -> int:
+	params_dict = {
+		"user_id": user_id,
+		"asof": asof,
+		"no_response": no_response,
+		"no_tweets": no_tweets,
+		"no_user": no_user,
+		"message": message,
+	}
+	params_list = ",".join([f":{x}" for x in params_dict.keys()])
+	sql = f"SELECT * FROM fn_insert_issue({params_list});"
+	with engine.begin() as conn:
+		setschema = f"SET search_path TO {schema},public;"
+		conn.execute(text(setschema))
+		seen_id = conn.execute(text(sql), params_dict).fetchone()[0]
+		do_nothing()
+
+	return seen_id
 
 
 def insert_user(
@@ -551,18 +624,18 @@ def update_relations(acct_id: int, asof: datetime, relation_type: str, user_ids:
 	"""
 	Updates dt_relation; Both acct_id and user_id must exist in dt_user, beforehand
 	"""
-	if relation_type not in ['follower', 'following', 'friend', 'blocked', 'muted']:
+	if relation_type not in ["follower", "following", "friend", "blocked", "muted"]:
 		raise ValueError(f"Unrecognized relation type: '{relation_type}'")
 	if not user_ids:
 		raise ValueError("Nothing to process")
 	# ToDo: Follower IDs
 	operation = None
-	if relation_type in ['follower', 'following', 'friend']:
-		operation = 'follow'
-	elif relation_type == 'blocked':
-		operation = 'block'
-	elif relation_type == 'muted':
-		operation = 'mute'
+	if relation_type in ["follower", "following", "friend"]:
+		operation = "follow"
+	elif relation_type == "blocked":
+		operation = "block"
+	elif relation_type == "muted":
+		operation = "mute"
 	else:
 		raise ValueError(f"Unrecognized relation type: '{relation_type}'")
 	with engine.begin() as conn:
@@ -576,115 +649,19 @@ def update_relations(acct_id: int, asof: datetime, relation_type: str, user_ids:
 				"in_user_id2": user_id,
 				"asof": asof,
 			}
-			if relation_type == 'follower':
-				params.update({
-					"in_user_id1": user_id,
-					"in_user_id2": acct_id,
-				})
+			if relation_type == "follower":
+				params.update(
+					{
+						"in_user_id1": user_id,
+						"in_user_id2": acct_id,
+					}
+				)
 			sql = "SELECT * FROM fn_relation(:operation, :in_user_id1, :in_user_id2, :asof);"
 			results = conn.execute(text(sql), params)
 			do_nothing()
 
-
 		# ToDo: Process User IDs no longer related
 
-	return
-
-
-def update_relations_old(
-	acct_id: int, asof: datetime, follower_ids: list | set, following_ids: list | set
-):
-	"""
-	Updates dt_relation; Both acct_id and user_id must exist in dt_user, beforehand
-	"""
-	if not follower_ids and not following_ids:
-		raise ValueError("Nothing to process")
-	with engine.begin() as conn:
-		setschema = f"SET search_path TO {schema},public;"
-		conn.execute(text(setschema))
-		# Fix #1 Follower IDs
-		if follower_ids:
-			setcols = ",".join(
-				[
-					"is_followed_by = false",
-					"asof = :asof",
-				]
-			)
-			where_conditions = [
-				"acct_id = :acct_id",
-				"user_id NOT IN (%s)" % stringify(follower_ids),
-			]
-			where_clause = " AND ".join(where_conditions)
-			params = {"acct_id": acct_id, "asof": asof}
-			sql = f"UPDATE dt_relation SET {setcols} WHERE {where_clause};"
-			result = conn.execute(text(sql), params)
-			do_nothing()
-
-		# Fix #2 Following IDs
-		if following_ids:
-			setcols = ",".join(
-				[
-					"is_following = false",
-					"asof = :asof",
-				]
-			)
-			where_conditions = [
-				"acct_id = :acct_id",
-				"user_id NOT IN (%s)" % stringify(following_ids),
-			]
-			where_clause = " AND ".join(where_conditions)
-			params = {"acct_id": acct_id, "asof": asof}
-			sql = f"UPDATE dt_relation SET {setcols} WHERE {where_clause};"
-			result = conn.execute(text(sql), params)
-			do_nothing()
-	##########
-	user_ids = sorted(list(set(following_ids + follower_ids)))
-	values = []
-	# Accounts that follow each other
-	mutual_ids = sorted(list(set(follower_ids).intersection(set(following_ids))))
-	# Accounts that follow, but not followed-back
-	groupie_ids = sorted(list(set(follower_ids) - set(following_ids)))
-	# Accounts being followed but don't follow-back
-	leader_ids = sorted(list(set(following_ids) - set(follower_ids)))
-	# Add to database
-	tablename = "dt_relation"
-	# acct_id, user_id, asof, is_following, is_followed_by
-	cols_list = [
-		"acct_id",
-		"user_id",
-		"asof",
-		"is_following",
-		"is_followed_by",
-	]
-	cols = ",".join(cols_list)
-	param_list = ",".join([f":{x}" for x in cols_list])
-
-	for user_id in user_ids:
-		is_followed_by = is_following = False
-		if user_id in follower_ids:
-			is_followed_by = True
-		if user_id in following_ids:
-			is_following = True
-		row = (acct_id, user_id, asof, is_following, is_followed_by)
-		params_dict = {
-			"acct_id": acct_id,
-			"user_id": user_id,
-			"asof": asof,
-			"is_following": is_following,
-			"is_followed_by": is_followed_by,
-		}
-		values.append(params_dict)
-	sql = " ".join(
-		[
-			f"INSERT INTO {tablename} ({cols})",
-			f"VALUES ({param_list})",
-			f"ON CONFLICT (acct_id, user_id) DO NOTHING;",
-		]
-	)
-	with engine.begin() as conn:
-		setschema = f"SET search_path TO {schema},public;"
-		conn.execute(text(setschema))
-		conn.execute(text(sql), values)
 	return
 
 

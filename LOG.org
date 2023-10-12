@@ -1,11 +1,16 @@
 #+TITLE:	Account Maintenance Research (2023)
 #+SUBTITLE:	Log
 #+DATE:		2023-06-09 05:39:10-04:00
-#+LASTMOD: 2023-06-28 23:08:32-0400 (EDT)
+#+LASTMOD: 2023-10-11 17:28:41-0400 (EDT)
 #+OPTIONS:	toc:nil num:nil
 #+STARTUP:	indent show3levels
 #+CATEGORIES[]:	Research
 #+TAGS[]:	log python sql sqitch twitter snscrape socialmedia
+
+* Wednesday, October 11, 2023
+- Upgraded sqitch
+- Added ~dt_staging~ step to sqitch plan
+- Attempting to add ~asof_triggers~ as a requirement to ~dt_staging~ step of ~pg/sqitch.plan~
 
 * Wednesday, June 28, 2023
 ** Rework: User Insert Function, Forward

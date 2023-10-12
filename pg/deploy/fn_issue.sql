@@ -21,7 +21,7 @@ BEGIN
 	) VALUES (
 		NEW.user_id, NEW.asof, NEW.no_response,
 		NEW.no_tweets, NEW.no_user, NEW.message
-	) ON CONFLICT (user_id) DO NOTHING;
+	) ON CONFLICT (user_id, asof) DO NOTHING;
 	RETURN NEW;
 END; $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -33,7 +33,7 @@ CREATE OR REPLACE TRIGGER tra_issue_history
 
 -- FUNCTION: insert function
 CREATE OR REPLACE FUNCTION fn_insert_issue(
-	user_id		BIGINT, 
+	in_user_id	BIGINT, 
 	asof		TIMESTAMPTZ, 
 	no_response	BOOLEAN,
 	no_tweets	BOOLEAN,

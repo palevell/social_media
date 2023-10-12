@@ -19,3 +19,6 @@ fn_user_insert [fn_user_insert@v1.0.0-dev3] 2023-06-29T00:16:40Z Patrick <patric
 dt_issue [devschema] 2023-06-29T20:30:15Z Patrick <patrick29501@gmx.com> # Add Issue-Tracking Table
 fn_issue [asof_triggers dt_issue devschema] 2023-06-30T20:49:26Z Patrick <patrick29501@gmx.com> # Add functions & triggers for issue tables
 @v1.0.0-dev4 2023-07-01T02:47:32Z Patrick <patrick29501@gmx.com> # Tag v1.0.0-dev4
+
+dt_staging [asof_triggers devschema] 2023-10-11T16:10:46Z Patrick <patrick29501@gmx.com> # Add table for staging data
+@v1.0.0-dev5 2023-10-12T00:01:52Z Patrick <patrick29501@gmx.com> # Tag v1.0.0-dev5

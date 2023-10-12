@@ -35,6 +35,7 @@ CREATE TABLE dt_issue_history (
 	message		TEXT
 );
 
+CREATE UNIQUE INDEX idx_issue_history_user_id_asof ON dt_issue_history(user_id, asof);
 CREATE INDEX idx_issue_history_user_id ON dt_issue_history(user_id);
 CREATE INDEX idx_issue_history_asof ON dt_issue_history(asof);
 

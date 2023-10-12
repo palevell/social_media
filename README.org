@@ -1,7 +1,7 @@
 #+TITLE:	Account Maintenance Research (2023)
 #+SUBTITLE:	README
 #+DATE:		2023-06-09 05:39:10-04:00
-#+LASTMOD: 2023-06-26 07:10:46-0400 (EDT)
+#+LASTMOD: 2023-10-11 10:37:17-0400 (EDT)
 #+OPTIONS:	toc:nil num:nil
 #+STARTUP:	indent showeverything
 #+CATEGORIES[]:	Research
@@ -11,4 +11,10 @@
 - [[https://github.com/palevell/social_media][GitHub Repository]]
 
 * Description
-
+- This started as a way to adapt my earlier account maintenance programs to use ~snscrape~, since the free version of Twitter's API is inadequate for my purposes
+** July 7, 2023
+- Then, Twitter made their site unavailable to the public, and ~snscrape~ no longer works
+- I have downloaded data archives for all of my accounts, except ~@palevell~, since it remains suspended
+- Unless something at Twitter changes, I am unable to continue with this project
+** October 11, 2023
+- There is a package named, ~twscrape~ that is based on ~snscrape~, which seems to satisfy my requirements for obtaining data for account maintenance
