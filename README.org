@@ -1,11 +1,11 @@
 #+TITLE:	Account Maintenance Research (2023)
 #+SUBTITLE:	README
 #+DATE:		2023-06-09 05:39:10-04:00
-#+LASTMOD: 2023-10-11 10:37:17-0400 (EDT)
+#+LASTMOD: 2023-10-14 05:41:06-0400 (EDT)
 #+OPTIONS:	toc:nil num:nil
 #+STARTUP:	indent showeverything
 #+CATEGORIES[]:	Research
-#+TAGS[]:	readme python sql sqitch twitter snscrape socialmedia
+#+TAGS[]:	readme python sql sqitch twitter snscrape twscrape socialmedia
 
 * URLs
 - [[https://github.com/palevell/social_media][GitHub Repository]]

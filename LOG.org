@@ -1,12 +1,28 @@
 #+TITLE:	Account Maintenance Research (2023)
 #+SUBTITLE:	Log
 #+DATE:		2023-06-09 05:39:10-04:00
-#+LASTMOD: 2023-10-11 17:28:41-0400 (EDT)
+#+LASTMOD: 2023-10-15 02:57:53-0400 (EDT)
 #+OPTIONS:	toc:nil num:nil
 #+STARTUP:	indent show3levels
 #+CATEGORIES[]:	Research
-#+TAGS[]:	log python sql sqitch twitter snscrape socialmedia
+#+TAGS[]:	log python sql sqitch twitter snscrape twscrape socialmedia
 
+* Sunday, October 15, 2023
+** AcctMaint-1.0.0-dev5
+* Saturday, October 14, 2023
+** Database Changes (ie. sqitch)
+1. Rollback ~dt_json_loader~
+2. Add ~dt_batch_control~ and ~dt_file_control~ (see TwitterDB project)
+   - Added ~last_batch~ view, and figured-out how to included it in the sqitch verify script
+   - Added ~get_batch_id()~ function to BASH
+3. Re-added ~dt_json_loader~
+** PostgreSQL Extension: ModDateTime
+- Can this replace my AsOf Triggers?
+* Friday, October 13, 2023
+** Importing JSON data from twscrape
+- I can use the ~psql~ ~COPY~ command
+** Reverted/Removed ~dt_staging~
+- Replaced with ~dt_json_loader~
 * Wednesday, October 11, 2023
 - Upgraded sqitch
 - Added ~dt_staging~ step to sqitch plan
