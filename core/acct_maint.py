@@ -82,12 +82,14 @@ def main(twit):
 		bad_following_ids = get_bad_user_ids(following_ids)
 
 		# Determine which User IDs to fetch (ie. not cached or current)
-		fetch_follower_ids = sorted(list(
-				set(follower_ids) - set(cached_follower_ids) - set(bad_follower_ids)
-		))
-		fetch_following_ids = sorted(list(
-			set(following_ids) - set(cached_following_ids) - set(bad_following_ids)
-		))
+		fetch_follower_ids = sorted(
+			list(set(follower_ids) - set(cached_follower_ids) - set(bad_follower_ids))
+		)
+		fetch_following_ids = sorted(
+			list(
+				set(following_ids) - set(cached_following_ids) - set(bad_following_ids)
+			)
+		)
 		# Eliminate duplicates
 		fetch_user_ids = sorted(list(set(fetch_following_ids + fetch_follower_ids)))
 		logger.info(f"User IDs to fetch: {len(fetch_user_ids):,d}")
@@ -229,7 +231,7 @@ def fetch_users(user_ids: list | set, lineno: int = 0) -> list:
 					]
 				)
 				logger.warning(msg)
-				insert_issue(user_id, _run_dt,False,True,False,msg)
+				insert_issue(user_id, _run_dt, False, True, False, msg)
 			logger.debug(f"{lineno+count+1:5d}) {user_id:19d} Adding to database . . .")
 			good_id = insert_user(
 				user_id=int(entity.id),
@@ -721,5 +723,12 @@ if __name__ == "__main__":
 	TEST_MAX_USERS = Config.TEST_MAX_USERS
 
 	init()
+	""" From Click Docs @ https://click.palletsprojects.com/en/latest/api/ :
+	standalone_mode – the default behavior is to invoke the script in
+	standalone mode. Click will then handle exceptions and convert them
+	into error messages and the function will never return but shut down the
+	interpreter. If this is set to False they will be propagated to the caller
+	and the return value of this function is the return value of invoke().
+	"""
 	main(standalone_mode=False)
 	eoj()

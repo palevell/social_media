@@ -12,10 +12,11 @@ SET search_path TO development;
 -- TABLE: dt_json_loader
 CREATE TABLE dt_json_loader(
 	id		BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+	batch_id	BIGINT,
+	file_id		BIGINT,
 	asof		TIMESTAMPTZ NOT NULL DEFAULT now(),
 	posted_at	TIMESTAMPTZ,
 	data_type	TEXT,
-	filename	TEXT,
 	acct_name	TEXT,
 	acct_id		BIGINT,
 	md5_hash	TEXT,
@@ -26,8 +27,9 @@ CREATE TABLE dt_json_loader(
 CREATE INDEX idx_json_acct_name ON dt_json_loader(acct_name);
 CREATE INDEX idx_json_acct_id ON dt_json_loader(acct_id);
 CREATE INDEX idx_json_asof ON dt_json_loader(asof);
+CREATE INDEX idx_json_batch_id ON dt_json_loader(batch_id);
 CREATE INDEX idx_json_datatype ON dt_json_loader(data_type);
-CREATE INDEX idx_json_filename ON dt_json_loader(filename);
+CREATE INDEX idx_json_file_id ON dt_json_loader(file_id);
 CREATE INDEX idx_md5_hash ON dt_json_loader(md5_hash);
 CREATE INDEX idx_posted_at ON dt_json_loader(posted_at);
 
@@ -37,15 +39,16 @@ COMMENT ON COLUMN dt_json_loader.id IS 'Primary key';
 COMMENT ON COLUMN dt_json_loader.acct_name IS 'Account name for context';
 COMMENT ON COLUMN dt_json_loader.acct_id IS 'Account number for context';
 COMMENT ON COLUMN dt_json_loader.asof IS 'As-of Date';
+COMMENT ON COLUMN dt_json_loader.batch_id IS 'Batch ID (Batch Control)';
 COMMENT ON COLUMN dt_json_loader.data_type IS 'Following, Follower, User';
-COMMENT ON COLUMN dt_json_loader.filename IS 'Filename of JSON file';
+COMMENT ON COLUMN dt_json_loader.file_id IS 'File ID (File Control)';
 COMMENT ON COLUMN dt_json_loader.j IS 'JSON data (short name for queries)';
 COMMENT ON COLUMN dt_json_loader.md5_hash IS 'MD5 hash for JSON';
 COMMENT ON COLUMN dt_json_loader.posted_at IS 'Date posted to tables';
 
 -- Views
 CREATE VIEW loaded_json AS
-SELECT id, asof, posted_at, data_type, filename, acct_name, acct_id, md5_hash,
+SELECT id, batch_id, file_id, asof, posted_at, data_type, acct_name, acct_id, md5_hash,
 	j->>'id_str' id_str,
 	j->>'username' username,
 	j->>'displayname' displayname,
@@ -65,9 +68,5 @@ SELECT id, asof, posted_at, data_type, filename, acct_name, acct_id, md5_hash,
 	j->>'location' location,
 	j->>'rawDescription' rawDescription
 FROM dt_json_loader;
-/*
-jq -r '[.id_str,.username,.displayName,.created,.statusesCount,.friendsCount,.followersCount,.favouritesCount,.listedCount,.mediaCount,.protected,.verified,.blue,.blueType,.profileImageUrl,.profileBannerUrl,.location,.rawDescription] | @csv' data/Accounts/iOS_Guy/Following.json | less -S
 
-
-*/
 COMMIT;

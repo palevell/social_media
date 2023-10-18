@@ -1,14 +1,38 @@
 #+TITLE:	Account Maintenance Research (2023)
 #+SUBTITLE:	Log
 #+DATE:		2023-06-09 05:39:10-04:00
-#+LASTMOD: 2023-10-15 02:57:53-0400 (EDT)
+#+LASTMOD: 2023-10-18 06:43:09-0400 (EDT)
 #+OPTIONS:	toc:nil num:nil
 #+STARTUP:	indent show3levels
 #+CATEGORIES[]:	Research
 #+TAGS[]:	log python sql sqitch twitter snscrape twscrape socialmedia
 
+* Wednesday, October 18, 2023
+** AcctMaint-1.1.0-dev0
+- Removed ~dt_json_loader~, in favour of using temporary tables (I did this in ~twitterdb~)
+** Initial Data Fetch From TwScrape is Complete
+- First batch of Twitter data fetched by ~twscrape~ appears to be complete
+- This has been a project external to this one
+- In its last iteration, ~acct_maint.py~ relied on the Twitter data dump to determine which users to process
+- I will try to adapt ~acct_maint.py~ to process the offline Twitter data, especially since I haven't explored how to use ~twscrape~ in Python.
+* Tuesday, October 17, 2023
+** JSON Loader
+- Need to remove "NOT NULL" from ~batch_id~ and ~file_id~
 * Sunday, October 15, 2023
 ** AcctMaint-1.0.0-dev5
+*** Room for Improvement
+1. sqitch deploy
+2. sqitch tag
+3. sqitch bundle
+4. git commit
+5. git tag
+6. git push
+** Changes to JSON Loader
+- Replaced ~filename~ with ~batch_id~ and ~file_id~
+** Changes to Batch Control
+- Added ~batch_status~ and ~completion_date~
+** Changes to File Control
+- Added ~file_status~, ~staged_date~, and ~posted_date~
 * Saturday, October 14, 2023
 ** Database Changes (ie. sqitch)
 1. Rollback ~dt_json_loader~

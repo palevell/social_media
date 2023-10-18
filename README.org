@@ -1,7 +1,7 @@
 #+TITLE:	Account Maintenance Research (2023)
 #+SUBTITLE:	README
 #+DATE:		2023-06-09 05:39:10-04:00
-#+LASTMOD: 2023-10-14 05:41:06-0400 (EDT)
+#+LASTMOD: 2023-10-18 06:31:06-0400 (EDT)
 #+OPTIONS:	toc:nil num:nil
 #+STARTUP:	indent showeverything
 #+CATEGORIES[]:	Research
@@ -18,3 +18,8 @@
 - Unless something at Twitter changes, I am unable to continue with this project
 ** October 11, 2023
 - There is a package named, ~twscrape~ that is based on ~snscrape~, which seems to satisfy my requirements for obtaining data for account maintenance
+** October 18, 2023
+- First batch of Twitter data fetched by ~twscrape~ appears to be complete
+- This has been a project external to this one
+- In its last iteration, ~acct_maint.py~ relied on the Twitter data dump to determine which users to process
+- I will try to adapt ~acct_maint.py~ to process the offline Twitter data, especially since I haven't explored how to use ~twscrape~ in Python.

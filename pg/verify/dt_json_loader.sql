@@ -5,7 +5,7 @@ BEGIN;
 SET search_path TO development;
 
 -- Verify dt_json_loader table
-SELECT	id, acct_name, acct_id, asof, j
+SELECT	id, batch_id, file_id, acct_name, acct_id, asof, j
 FROM	dt_json_loader
 WHERE	FALSE;
 
