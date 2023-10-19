@@ -1,37 +1,31 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# acct_maint.py - Thursday, June 22, 2023
+# acct_maint_twscrape.py - Thursday, June 22, 2023
 """ Follow retweeters and unfollow less-active tweeps """
-__version__ = "0.1.5-dev3"
+__version__ = "0.2.6-dev8"
 
 import builtins
-import click
-import coloredlogs
 import json
-import logging
 import logging.config
 import lzma
 import os
-import oyaml as yaml
-import pid
-import snscrape.base
-import snscrape.modules.twitter as sntwitter
 import sys
-from collections import Counter
 from datetime import datetime, timedelta, timezone
 from itertools import cycle
-from logging.handlers import RotatingFileHandler
-from os.path import basename, exists, getmtime, join
+from os.path import exists, getmtime, join
 from pathlib import Path
-from random import choices, shuffle, uniform
-from requests import get
-from tabulate import tabulate
+from random import shuffle, uniform
 from time import sleep
 
+import click
+import coloredlogs
+import oyaml as yaml
 import pandas as pd
-from PIL import Image, ImageDraw, ImageFont
+import snscrape.base
+import snscrape.modules.twitter as sntwitter
 from pid.decorator import pidfile
-from sqlalchemy import create_engine, text
+from requests import get
+from sqlalchemy import create_engine, inspect, text
 
 basedir = Path(__file__).resolve().parent.parent
 if basedir not in sys.path:
@@ -46,13 +40,43 @@ if not exists(PIDDIR):
 	PIDDIR = "/tmp"
 
 
-@click.command()
-@click.argument("twit", nargs=-1)
 @pidfile(piddir=PIDDIR)
-def main(twit):
-	twit_list = list(twit)
-	for _ in range(10):
-		shuffle(twit_list)
+def main():
+	accts = Config.ACCTS
+	logger.debug(f"DATA_DIR         : {_data_dir}")
+	logger.debug(f"TWSCRAPE_DATA_DIR: {_twscrape_data_dir}")
+
+	cols = ",".join(["id", "user_id", "username", "status", "created_at", "notes"])
+	"""
+	for acct in accts:
+		with engine.begin() as trans:
+	"""
+	with engine.begin() as trans:
+		for acct in accts:
+			sql = f"SELECT {cols} FROM dt_auth_user WHERE username = :acct;"
+			params = {"acct": acct}
+			result = trans.execute(text(sql), params)
+			if not result.rowcount:
+				logger.warning(f"No authorized user record for @{acct}")
+			# Get Column Names
+			if not cols:
+				db_columns = list(result.keys())
+				logger.debug(f"DB Columns: {db_columns}")
+			for row in result.fetchall():
+				logger.debug(row)
+
+		acct_dir = _twscrape_data_dir / "Accounts" / acct
+		logger.debug(f"acct_dir: {acct_dir}")
+		if not acct_dir.exists():
+			logger.warning(f"Account directory not found: {acct_dir}")
+	return
+
+
+# @click.command()
+# @click.argument("twit", nargs=-1)
+# @pidfile(piddir=PIDDIR)
+def main_old():
+	twit_list = Config.ACCTS
 	twit = tuple(twit_list)
 	for screen_name in twit:
 		screen_name = screen_name.lstrip("@")
@@ -96,11 +120,11 @@ def main(twit):
 
 		if fetch_user_ids:
 			# Testing
-			if TEST_MAX_USERS:
+			if _test_max_users:
 				# Shuffle list of IDs to fetch and pick first XXX values
 				for _ in range(10):
 					shuffle(fetch_user_ids)
-				fetch_user_ids = fetch_user_ids[:TEST_MAX_USERS]
+				fetch_user_ids = fetch_user_ids[:_test_max_users]
 				# Reduce following/follower IDs to those in the list, above
 				following_ids = list(
 					set(following_ids).intersection(set(fetch_user_ids))
@@ -119,7 +143,7 @@ def main(twit):
 			)
 			for batch_count, batch in enumerate(batches):
 				if batch_count > 0:
-					snoozer(MIN_BATCH_DELAY, MAX_BATCH_DELAY)
+					snoozer(_min_batch_delay, _max_batch_delay)
 				fetched_ids = fetch_users(batch, line_number)
 				if fetched_ids:
 					fetched_follower_ids = sorted(
@@ -148,31 +172,43 @@ def main(twit):
 
 
 def init():
-	msg = f"{__module__} {__version__} Run Start: {_run_dt.replace(microsecond=0)}"
+	msgs = [
+		f"{__module__} {__version__} Run Start: {_run_dt.replace(microsecond=0)}",
+	]
 	if DRYRUN:
-		msg += " (DRY RUN)"
-	logger.info(msg)
+		msgs.append("(DRY RUN)")
+	if not ONLINE_MODE:
+		msgs.append("(OFFLINE MODE)")
+	logger.info(" ".join(msgs))
 
-	proxy = os.getenv("ALL_PROXY")
-	if proxy:
-		print(f"ALL_PROXY = {proxy}")
-	# Check IP Address being used
-	check_ip_pool = cycle(Config.MYIP_URLS_HTTPS)
-	retries = 3
-	while retries > 0:
-		try:
-			url = next(check_ip_pool)
-			r = get(url, timeout=(3.05, 30))
-			if r.ok:
-				logger.info(f"IP Address: {r.text.rstrip()} via {url}")
-			retries = -1
-		except Exception as e:
-			retries -= 1
-			if retries > 0:
-				logger.warning(e)
-			else:
-				logger.exception(e)
-			do_nothing()
+	# Get Table Names
+	logger.debug("Table Information:")
+	for table_name in sorted(inspect(engine).get_table_names()):
+		sql = f"SELECT count(*) rows FROM {table_name};"
+		with engine.connect() as conn:
+			result = conn.execute(text(sql)).fetchone()
+		logger.debug(f"- {table_name:20s}\t{result[0]:9,d}")
+	if ONLINE_MODE:
+		proxy = os.getenv("ALL_PROXY")
+		if proxy:
+			print(f"ALL_PROXY = {proxy}")
+		# Check IP Address being used
+		check_ip_pool = cycle(Config.MYIP_URLS_HTTPS)
+		retries = 3
+		while retries > 0:
+			try:
+				url = next(check_ip_pool)
+				r = get(url, timeout=(3.05, 30))
+				if r.ok:
+					logger.info(f"IP Address: {r.text.rstrip()} via {url}")
+				retries = -1
+			except Exception as e:
+				retries -= 1
+				if retries > 0:
+					logger.warning(e)
+				else:
+					logger.exception(e)
+				do_nothing()
 	return
 
 
@@ -205,7 +241,7 @@ def fetch_users(user_ids: list | set, lineno: int = 0) -> list:
 	# Fetch User IDs
 	for count, user_id in enumerate(user_ids):
 		if count > 0:
-			sleep(uniform(MIN_SEARCH_DELAY, MAX_SEARCH_DELAY))
+			sleep(uniform(_min_search_delay, _max_search_delay))
 		try:
 			user = sntwitter.TwitterUserScraper(user_id)
 			entity = user.entity
@@ -278,7 +314,7 @@ def fetch_users(user_ids: list | set, lineno: int = 0) -> list:
 				insert_issue(user_id, _run_dt, False, False, False, msg)
 			if consecutive_error_count == 25:
 				raise Exception("Too many errors.  Aborting.")
-		# snoozer(MIN_ERROR_DELAY, MAX_ERROR_DELAY)
+		# snoozer(_min_error_delay, _max_error_delay)
 	return fetched_ids
 
 
@@ -310,7 +346,7 @@ def get_cached_users(user_ids):
 	]
 	where_clause = "asof > :since"
 	order_by = "asof DESC"
-	params = {"since": (_run_dt.replace(microsecond=0) - timedelta(days=CACHE_DAYS))}
+	params = {"since": (_run_dt.replace(microsecond=0) - timedelta(days=_cache_days))}
 	sql = f"SELECT * FROM {tablename} WHERE {where_clause} ORDER BY {order_by};"
 	with engine.connect() as conn:
 		setschema = f"SET search_path TO {schema},public;"
@@ -345,7 +381,7 @@ def get_cached_user_ids(user_ids):
 		setschema = f"SET search_path TO {schema},public;"
 		conn.execute(text(setschema))
 		params = {
-			"since": (_run_dt.replace(microsecond=0) - timedelta(days=CACHE_DAYS))
+			"since": (_run_dt.replace(microsecond=0) - timedelta(days=_cache_days))
 		}
 		# Columns: ['user_id', 'asof', 'screen_name', 'name', 'created_at', 'default_profile_image', 'protected', 'followers_count', 'friends_count', 'listed_count', 'statuses_count', 'last_tweet']
 		where_conditions = [
@@ -372,7 +408,7 @@ def get_bad_user_ids(user_ids):
 		setschema = f"SET search_path TO {schema},public;"
 		conn.execute(text(setschema))
 		params = {
-			"since": (_run_dt.replace(microsecond=0) - timedelta(days=CACHE_DAYS))
+			"since": (_run_dt.replace(microsecond=0) - timedelta(days=_cache_days))
 		}
 		# Columns: ['user_id', 'asof', 'screen_name', 'name', 'created_at', 'default_profile_image', 'protected', 'followers_count', 'friends_count', 'listed_count', 'statuses_count', 'last_tweet']
 		where_conditions = [
@@ -399,7 +435,7 @@ def load_account_info(screen_name: str) -> dict:
 	- Uses timestamp of the archive to obtain 'asof' date
 	"""
 	acct_dict = {}
-	filename = twitter_data_dir / f"{screen_name}" / "data" / f"account.js"
+	filename = _twscrape_data_dir / f"{screen_name}" / "data" / f"account.js"
 	asof = datetime.fromtimestamp(getmtime(filename)).astimezone()
 	with open(filename) as fp:
 		data = fp.read().lstrip("window.YTD.account.part0 = ")
@@ -430,8 +466,8 @@ def load_ids(id_type, user_id=None, screen_name=None):
 		)
 	if id_type == "friend":
 		id_type = "following"
-	# filename = data_dir / f"{screen_name}_following.js"
-	filename = twitter_data_dir / f"{screen_name}" / "data" / f"{id_type}.js"
+	# filename = _data_dir / f"{screen_name}_following.js"
+	filename = _twscrape_data_dir / f"{screen_name}" / "data" / f"{id_type}.js"
 	friendly_id_type = str(id_type).capitalize()
 	# fn_logger = logging.getLogger("%s.get_%s_ids" % (__module__, id_type))
 	logger.info(f"Filename: {filename}")
@@ -446,7 +482,7 @@ def load_ids(id_type, user_id=None, screen_name=None):
 
 def load_ignored_user_ids():
 	ids = []
-	filename = twitter_data_dir / "ignore_user_ids.txt"
+	filename = _twscrape_data_dir / "ignore_user_ids.txt"
 	with open(filename) as fp:
 		ids = [x.rstrip() for x in fp.readlines()]
 	return ids
@@ -680,7 +716,7 @@ if __name__ == "__main__":
 	__appname__ = Config.__appname__
 	DEBUG = Config.DEBUG
 	DRYRUN = Config.DRYRUN
-	# LOG_LEVEL = Config.LOG_LEVEL
+	ONLINE_MODE = Config.ONLINE_MODE
 
 	# Configure Logging
 	with open(find_logging_config(), "r") as cfgfile:
@@ -692,37 +728,28 @@ if __name__ == "__main__":
 	logger = logging.getLogger("")
 
 	# Configure File System Stuff
-	cache_dir = Config.CACHE_DIR
-	data_dir = Config.DATA_DIR
-	report_dir = Config.REPORT_DIR
-	acct_cache = Config.ACCT_CACHE
-	twitter_data_dir = Config.TWITTER_DATA_DIR
-	user_cache = Config.USER_CACHE
+	_data_dir = Config.DATA_DIR
+	_twscrape_data_dir = Config.TWSCRAPE_DATA_DIR
 
 	# Database Stuff
-	# DATABASE_URL = Config.DATABASE_URL
-	db_url = Config.SQLALCHEMY_DATABASE_URI
-	# Connect to database
-	engine = create_engine(db_url, echo=False)
+	engine = create_engine(Config.SQLALCHEMY_DATABASE_URI, echo=False)
 	schema = Config.DB_SCHEMA
 
-	# Direct Message Recipient (ie. me)
-	DM_RECIPIENT_ID = Config.DM_RECIPIENT_ID
-
 	# Tweet-related Configuration
-	CACHE_DAYS = Config.CACHE_DAYS
-	MIN_BATCH_DELAY, MAX_BATCH_DELAY = Config.BATCH_DELAY_RANGE
-	MIN_ERROR_DELAY, MAX_ERROR_DELAY = Config.ERROR_DELAY_RANGE
-	MIN_SEARCH_DELAY, MAX_SEARCH_DELAY = Config.SEARCH_DELAY_RANGE
-
-	NEW_FRIEND_LIMIT = Config.NEW_FRIEND_LIMIT
-	MIN_LISTED_COUNT = Config.MIN_LISTED_COUNT
-	MIN_STATUS_COUNT = Config.MIN_STATUS_COUNT
+	_cache_days = Config.CACHE_DAYS
+	_min_batch_delay, _max_batch_delay = Config.BATCH_DELAY_RANGE
+	_min_error_delay, _max_error_delay = Config.ERROR_DELAY_RANGE
+	_min_search_delay, _max_search_delay = Config.SEARCH_DELAY_RANGE
 
 	# Testing Stuff
-	TEST_MAX_USERS = Config.TEST_MAX_USERS
+	_test_max_users = Config.TEST_MAX_USERS
 
 	init()
+
+
+	sys.exit()
+
+
 	""" From Click Docs @ https://click.palletsprojects.com/en/latest/api/ :
 	standalone_mode – the default behavior is to invoke the script in
 	standalone mode. Click will then handle exceptions and convert them
@@ -730,5 +757,6 @@ if __name__ == "__main__":
 	interpreter. If this is set to False they will be propagated to the caller
 	and the return value of this function is the return value of invoke().
 	"""
-	main(standalone_mode=False)
+	# main(standalone_mode=False)
+	main()
 	eoj()

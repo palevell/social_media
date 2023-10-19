@@ -751,9 +751,13 @@ compile_commands.json
 
 # Data
 /data
+/data-xz
 
 # Symlinks
 /log_dir
 
 # DBeaver
 /dbeaver
+
+# Data Dumps
+/pg/dump/*

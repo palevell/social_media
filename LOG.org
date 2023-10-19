@@ -1,11 +1,18 @@
 #+TITLE:	Account Maintenance Research (2023)
 #+SUBTITLE:	Log
 #+DATE:		2023-06-09 05:39:10-04:00
-#+LASTMOD: 2023-10-18 06:43:09-0400 (EDT)
+#+LASTMOD: 2023-10-19 09:00:21-0400 (EDT)
 #+OPTIONS:	toc:nil num:nil
 #+STARTUP:	indent show3levels
 #+CATEGORIES[]:	Research
 #+TAGS[]:	log python sql sqitch twitter snscrape twscrape socialmedia
+
+* Thursday, October 19, 2023
+** Adapting ~acct_maint.py~ to Work with Twscrape Data
+** Table Upgrades
+*** ~dt_auth_user~
+- Added AsOf date column
+- Replaced date columns for locked & suspended accounts with ~status_date~
 
 * Wednesday, October 18, 2023
 ** AcctMaint-1.1.0-dev0
