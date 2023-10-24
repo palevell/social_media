@@ -4,6 +4,6 @@ BEGIN;
 
 SET search_path TO development;
 
-DROP TABLE dt_auth_user CASCADE;
+DROP TABLE IF EXISTS dt_auth_user CASCADE;
 
 COMMIT;

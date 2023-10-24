@@ -1,15 +1,39 @@
 #+TITLE:	Account Maintenance Research (2023)
 #+SUBTITLE:	Log
 #+DATE:		2023-06-09 05:39:10-04:00
-#+LASTMOD: 2023-10-19 09:00:21-0400 (EDT)
-#+OPTIONS:	toc:nil num:nil
+#+LASTMOD: 2023-10-24 04:14:55-0400 (EDT)
+#+OPTIONS:	toc:nil num:nil ^:nil
 #+STARTUP:	indent show3levels
 #+CATEGORIES[]:	Research
 #+TAGS[]:	log python sql sqitch twitter snscrape twscrape socialmedia
 
+* Tuesday, October 24, 2023
+** Reverting Sqitch Back to the Beginning
+- Command: ~sqitch revert --to=devschema~
+- ~dt_auth_user~ and ~fn_user_insert~ must have been removed by a previous statement with a CASCADE option; added ~IF EXISTS~ to appropriate ~DROP TABLE~ statements
+*** Sqitch Revert Scripts with CASCADE Statements
+- dt_auth_user.sql
+- dt_auth_user@v1.1.0-dev0.sql
+- dt_batch_control.sql
+- dt_file_control.sql
+- dt_issue.sql
+- dt_json_loader.sql
+- dt_relation_history.sql
+- dt_user_history.sql
+** TwScrape Data Processed with BASH
+
+* Friday, October 20, 2023
+** TwScrape vs. Twitter Data Archives
+- The largest Twitter data archive that I received was about 15 GB; For all accounts, it was something like 60 GB
+- It takes Twitter a day or two to prepare the archive and it can take another day to download it
+- The archive contains much more data than I am interested in, including large media files; doing this repeatedly is inefficient
+- Only the Twitter Data Archive has access to blocked & muted accounts
+- TwScrape can find the retweeters of specific tweets
+** Working with TwScrape Data
+
 * Thursday, October 19, 2023
 ** Adapting ~acct_maint.py~ to Work with Twscrape Data
-** Table Upgrades
+** Table Upgrades (v1.1.0-dev1)
 *** ~dt_auth_user~
 - Added AsOf date column
 - Replaced date columns for locked & suspended accounts with ~status_date~

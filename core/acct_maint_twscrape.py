@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # acct_maint_twscrape.py - Thursday, June 22, 2023
 """ Follow retweeters and unfollow less-active tweeps """
-__version__ = "0.2.6-dev8"
+__version__ = "0.2.6-dev49"
 
 import builtins
 import json
@@ -12,7 +12,7 @@ import os
 import sys
 from datetime import datetime, timedelta, timezone
 from itertools import cycle
-from os.path import exists, getmtime, join
+from os.path import basename, exists, getmtime, join
 from pathlib import Path
 from random import shuffle, uniform
 from time import sleep
@@ -42,33 +42,20 @@ if not exists(PIDDIR):
 
 @pidfile(piddir=PIDDIR)
 def main():
-	accts = Config.ACCTS
-	logger.debug(f"DATA_DIR         : {_data_dir}")
-	logger.debug(f"TWSCRAPE_DATA_DIR: {_twscrape_data_dir}")
-
-	cols = ",".join(["id", "user_id", "username", "status", "created_at", "notes"])
-	"""
-	for acct in accts:
-		with engine.begin() as trans:
-	"""
-	with engine.begin() as trans:
-		for acct in accts:
-			sql = f"SELECT {cols} FROM dt_auth_user WHERE username = :acct;"
-			params = {"acct": acct}
-			result = trans.execute(text(sql), params)
-			if not result.rowcount:
-				logger.warning(f"No authorized user record for @{acct}")
-			# Get Column Names
-			if not cols:
-				db_columns = list(result.keys())
-				logger.debug(f"DB Columns: {db_columns}")
-			for row in result.fetchall():
-				logger.debug(row)
-
-		acct_dir = _twscrape_data_dir / "Accounts" / acct
-		logger.debug(f"acct_dir: {acct_dir}")
-		if not acct_dir.exists():
-			logger.warning(f"Account directory not found: {acct_dir}")
+	acct_names = Config.ACCTS
+	batch_id = get_new_batch_id(_run_dt)
+	for acct_name in acct_names:
+		acct_dict = process_acct_info(batch_id, acct_name)
+		acct_id = acct_dict["id"]
+		user_dict = process_user_info(acct_name, acct_id)
+		last_tweet = None
+		last_tweet_date = None 
+		if "lastTweet" in user_dict:
+			last_tweet = user_dict["lastTweet"]
+		if "lastTweetDate" in user_dict:
+			last_tweet_date = user_dict["lastTweetDate"]
+		rows = process_following(batch_id, acct_name, acct_id)
+			
 	return
 
 
@@ -180,14 +167,7 @@ def init():
 	if not ONLINE_MODE:
 		msgs.append("(OFFLINE MODE)")
 	logger.info(" ".join(msgs))
-
-	# Get Table Names
-	logger.debug("Table Information:")
-	for table_name in sorted(inspect(engine).get_table_names()):
-		sql = f"SELECT count(*) rows FROM {table_name};"
-		with engine.connect() as conn:
-			result = conn.execute(text(sql)).fetchone()
-		logger.debug(f"- {table_name:20s}\t{result[0]:9,d}")
+	# get_table_names()
 	if ONLINE_MODE:
 		proxy = os.getenv("ALL_PROXY")
 		if proxy:
@@ -217,6 +197,96 @@ def eoj():
 	duration = stop_dt.replace(microsecond=0) - _run_dt.replace(microsecond=0)
 	logger.info("Run Stop : %s  Duration: %s" % (stop_dt, duration))
 	return
+
+
+def db_create_view(tablename: str, row_type: str) -> str | None:
+	sql = None
+	row_type = row_type.lower()
+	if row_type not in ["following", "followers", "accountinfo", "user", "usertweet"]:
+		raise ValueError(f"Unrecognized file_type: '{row_type}'")
+	if row_type == "following":
+		sql = f"""
+			CREATE TEMP VIEW tmp_following AS
+			SELECT j->'id_str' id_str, j->'username' username
+			FROM {tablename};
+		"""
+	elif row_type == "usertweet":
+		# jsonb_array_elements(j->'descriptionLinks')->'url'
+		usertweet_cols = {
+			"_type": "_type",
+			"blue": "blue",
+			"blueType": "blue_type",
+			"created": "created_at",
+			"descriptionLinks": "description_links",
+			"displayname": "display_name",
+			"favouritesCount": "favourites_count",
+			"followersCount": "followers_count",
+			"friendsCount": "friends_count",
+			"id": "id",
+			"id_str": "id_str",
+			"lastTweet": "last_tweet",
+			"lastTweetDate": "last_tweet_date",
+			"listedCount": "listed_count",
+			"location": "location",
+			"mediaCount": "media_count",
+			"profileBannerUrl": "banner_url",
+			"profileImageUrl": "image_url",
+			"protected": "protected",
+			"rawDescription": "description",
+			"statusesCount": "statuses_count",
+			"url": "url",
+			"username": "username",
+		}
+		sql = """ CREATE TEMP VIEW loaded_json AS
+			SELECT id, batch_id, file_id, asof, posted_at, data_type, acct_name, acct_id, md5_hash,
+				j->>'id_str' id_str,
+				j->>'username' username,
+				j->>'displayname' displayname,
+				j->>'created' created,
+				j->>'statusesCount' statusesCount,
+				j->>'friendsCount' friendsCount,
+				j->>'followersCount' followersCount,
+				j->>'favouritesCount' favouritesCount,
+				j->>'listedCount' listedCount,
+				j->>'mediaCount' mediaCount,
+				j->>'protected' protected,
+				j->>'verified' verified,
+				j->>'blue' blue,
+				j->>'blueType' blueType,
+				j->>'profileImageUrl' profileImageUrl,
+				j->>'profileBannerUrl' profileBannerUrl,
+				j->>'location' location,
+				j->>'rawDescription' rawDescription
+			FROM dt_json_loader;
+		"""
+	return sql.strip()
+
+
+def db_load_json(batch_id: int, file_type: str, filename: str | Path) -> list:
+	loaded_rows = []
+	file_type = file_type.lower()
+	if file_type not in ["following", "followers", "accountinfo", "user", "usertweet"]:
+		raise ValueError(f"Unrecognized file_type: '{file_type}'")
+	file_dict = get_new_file_id(batch_id, filename)
+	if file_dict:
+		file_id = file_dict["file_id"]
+		tbl = f"tmp_json_{batch_id}_{file_id}"
+
+		stmts = [
+			f"CREATE TEMP TABLE {tbl} (j JSONB) ON COMMIT DROP;",
+			f"COPY {tbl} FROM '{filename}' CSV QUOTE e'\x01' DELIMITER e'\x02';",
+			db_create_view(tbl, file_type),
+			f"SELECT * FROM tmp_{file_type} LIMIT 10;"
+		]
+		with engine.begin() as trans:
+			for stmt in stmts:
+				result = trans.execute(text(stmt))
+				if result.rowcount > 0:
+					loaded_rows = result.fetchall()
+					do_nothing()
+		if loaded_rows:
+			update_file_status(file_id, "J")
+	return loaded_rows
 
 
 def fetch_users(user_ids: list | set, lineno: int = 0) -> list:
@@ -369,7 +439,7 @@ def get_cached_users(user_ids):
 		row_count = rows.rowcount
 		print("Row Count: {:,d}".format(row_count))
 		# df = pd.DataFrame(rows, columns=rows.keys())
-	return pd.DataFrame(rows, columns=rows.keys())
+	return pd.DataFrame(rows, columns=list(rows.keys()))
 
 
 # ToDo: Should this be using dt_user_history?
@@ -427,6 +497,67 @@ def get_bad_user_ids(user_ids):
 
 def get_follower_ids(user_id=None, screen_name=None):
 	return load_ids(id_type="follower", user_id=user_id, screen_name=screen_name)
+
+
+def get_new_batch_id(batch_date: datetime | None) -> int:
+	if not batch_date:
+		batch_date = _run_dt
+	sql = "INSERT INTO dt_batch_control(batch_date) VALUES (:batch_date) RETURNING id;"
+	print(sql)
+	params = {"batch_date": batch_date}
+	with engine.begin() as conn:
+		row = conn.execute(text(sql), params).fetchone()
+		batch_id = row[0]
+		print(f"New Batch ID: {batch_id}")
+	return batch_id
+
+
+def get_new_file_id(batch_id: int, filename: str | Path) -> dict | None:
+	file_dict = None
+	filedate = datetime.fromtimestamp(getmtime(filename)).astimezone()
+	lines = line_count(filename)
+
+	with engine.begin() as trans:
+		params = {
+			"batch_id": batch_id,
+			"filename": str(filename),
+			"filedate": filedate,
+			"lines": lines,
+		}
+		columns = [
+			"batch_id",
+			"filename",
+			"filedate",
+			"lines",
+		]
+		cols = ",".join(columns)
+		placeholders = ",".join(f":{x}" for x in columns)
+		sql = f"""
+			INSERT INTO dt_file_control({cols})
+			VALUES({placeholders})
+			ON CONFLICT (batch_id, filename) DO NOTHING
+			RETURNING id;
+		""".strip()
+		try:
+			result = trans.execute(text(sql), params)
+			if result.rowcount > 0:
+				file_id = result.fetchone()[0]
+				file_dict = {"file_id": file_id, "filedate": filedate, "lines": lines}
+		except Exception as e:
+			logger.exception(e)
+			do_nothing()
+	return file_dict
+
+
+def get_table_names():
+	# Get Table Names
+	logger.debug("Table Names & Row Counts:")
+	for table_name in sorted(inspect(engine).get_table_names()):
+		sql = f"SELECT count(*) rows FROM {table_name};"
+		with engine.connect() as conn:
+			result = conn.execute(text(sql)).fetchone()
+		logger.debug(f"- {table_name:20s}\t{result[0]:9,d}")
+	return
 
 
 def load_account_info(screen_name: str) -> dict:
@@ -583,6 +714,13 @@ def insert_user(
 	return seen_id
 
 
+def line_count(filename: str | Path) -> int:
+	l = -1
+	with open(filename) as fp:
+		l = sum(1 for _ in fp)
+	return l
+
+
 def load_ids_file(id_type, id_key, filename):
 	ids = []
 	with open(filename) as fp:
@@ -603,6 +741,141 @@ def load_ids_file(id_type, id_key, filename):
 				ids.append(acct_id)
 				do_nothing()
 	return ids
+
+
+def process_acct_info(batch_id: int, acct_name: str) -> dict:
+	"""
+	At present, the AccountInfo.json files don't contain lastTweet or lastTweetDate keys,
+	which have been added to the files in the Users directory
+	"""
+	acct_dict = {}
+	acct_dir = _twscrape_data_dir / "Accounts" / acct_name
+	if not acct_dir.exists():
+		logger.warning(f"Account directory not found: {acct_dir}")
+	filename = acct_dir / "AccountInfo.json"
+	file_dict = get_new_file_id(batch_id, filename)
+	file_id = file_dict["file_id"]
+	# asof = datetime.fromtimestamp(getmtime(filename)).astimezone()
+	asof = file_dict["filedate"]
+	with open(filename) as acctfile:
+		acct_dict = json.load(acctfile)
+	acct_name2 = acct_dict["username"]
+	if acct_name != acct_name2:
+		raise ValueError(
+			f"Account name mismatch.  Was expecting '{acct_name}', got '{acct_name2}'."
+		)
+	acct_id = acct_dict["id"]
+	created_at = acct_dict["created"]
+	logger.info(f"{acct_id:19d} @{acct_name:16s} {asof.replace(microsecond=0)}")
+	# cols = ",".join(["id", "user_id", "username", "status", "created_at", "notes"])
+	with engine.begin() as trans:
+		cols = ",".join(
+			[
+				"user_id",
+				"username",
+				"created_at",
+				"asof",
+			]
+		)
+		params = {
+			"user_id": acct_id,
+			"username": acct_name,
+			"created_at": created_at,
+			"asof": asof,
+		}
+		sql = f"""
+			INSERT INTO dt_auth_user AS dau({cols})
+			VALUES(:user_id, :username, :created_at, :asof)
+			ON CONFLICT (user_id, username) DO UPDATE
+				SET asof = :asof
+				WHERE dau.user_id = EXCLUDED.user_id
+				  AND dau.username = EXCLUDED.username
+				  AND dau.asof < EXCLUDED.asof
+			RETURNING id;
+		""".strip()
+		result = trans.execute(text(sql), params)
+		if result.rowcount > 0:
+			# ToDo: When we get newer data
+			update_file_status(file_id, "P")
+			do_nothing()
+		if acct_dict:
+			update_file_status(file_id, "C")
+	return acct_dict
+
+
+def process_followers(batch_id: int, acct_name: str, acct_id: int):
+	process_relationships(batch_id, "Followers", acct_name, acct_id)
+	return
+
+
+def process_following(batch_id: int, acct_name: str, acct_id: int) -> int | None:
+	process_relationships(batch_id, "Following", acct_name, acct_id)
+	return
+
+
+def process_relationships(batch_id: int, relation_type: str, acct_name: str, acct_id: int):
+	rows = []
+	filename = None
+	operation = None
+	relation_type = relation_type.lower()
+	if relation_type == "following":
+		operation = "follow"
+		filename = _twscrape_data_dir / "Accounts" / acct_name / "Following.json"
+	elif relation_type == "follower":
+		pass
+	else:
+		raise ValueError(f"Unrecognized relation_type: '{relation_type}'")
+	logger.debug(f"Processing {filename}")
+	file_dict = get_new_file_id(batch_id, filename)
+	file_id = file_dict["file_id"]
+	asof = datetime.fromtimestamp(getmtime(filename)).astimezone()
+	update_file_status(file_id, "R")
+	loaded_rows = db_load_json(batch_id, relation_type, filename)
+
+	for user_id, username in loaded_rows:
+		"""
+		# Columns: user_id1, user_id2, asof, follows, blocked, muted
+		for user_id in user_ids:
+		"""
+		params = {
+			"operation": operation,
+			"in_user_id1": acct_id,
+			"in_user_id2": user_id,
+			"asof": asof,
+		}
+		if relation_type == "follower":
+			params.update({
+				"in_user_id1": user_id,
+				"in_user_id2": acct_id,
+			})
+		with engine.begin() as trans:
+			sql = "SELECT * FROM fn_relation(:operation, :in_user_id1, :in_user_id2, :asof);"
+			# I think this returns a list of IDs in dt_relation
+			rows = trans.execute(text(sql)).fetchall()
+			do_nothing()
+
+	return rows
+
+
+def process_user_info(acct_name: str, acct_id: int) -> dict:
+	"""
+	At present, the AccountInfo.json files don't contain lastTweet or lastTweetDate keys,
+	which have been added to the files in the Users directory
+	"""
+	user_dict = {}
+	# So far, the User files are two days older than the AccountInfo files
+	last_tweet = None
+	last_tweet_date = None
+	user_info = _twscrape_data_dir / "Users" / f"{acct_name}_{acct_id}.json"
+	user_asof = datetime.fromtimestamp(getmtime(user_info)).astimezone()
+	with open(user_info) as userfile:
+		user_dict = json.load(userfile)
+	if "lastTweet" in user_dict:
+		last_tweet = user_dict["lastTweet"]
+	if "lastTweetDate" in user_dict:
+		last_tweet_date = datetime.fromisoformat(user_dict["lastTweetDate"]).astimezone()
+	logger.info(f"{acct_id:19d} @{acct_name:16s} {user_asof.replace(microsecond=0)} {last_tweet_date}")
+	return user_dict
 
 
 def save_ids(filename, ids):
@@ -655,6 +928,14 @@ def snoozer(min_sleep, max_sleep=None):
 def stringify(iterable, separator=","):
 	iterable = separator.join([str(x) for x in iterable])
 	return iterable
+
+
+def update_file_status(file_id: int, status: str):
+	params = {"file_id": file_id, "status": status[0].upper(), "status_date": _run_dt}
+	sql = f"UPDATE dt_file_control SET file_status = :status, status_date = :status_date;"
+	with engine.begin() as trans:
+		rowcount = trans.execute(text(sql), params).rowcount
+	return
 
 
 # ToDo: Change database function(s) to handle follow/unfollow, block/unblock, and mute/unmute operations
@@ -732,7 +1013,7 @@ if __name__ == "__main__":
 	_twscrape_data_dir = Config.TWSCRAPE_DATA_DIR
 
 	# Database Stuff
-	engine = create_engine(Config.SQLALCHEMY_DATABASE_URI, echo=False)
+	engine = create_engine(Config.SQLALCHEMY_DATABASE_URI, echo=DEBUG)
 	schema = Config.DB_SCHEMA
 
 	# Tweet-related Configuration
@@ -745,11 +1026,6 @@ if __name__ == "__main__":
 	_test_max_users = Config.TEST_MAX_USERS
 
 	init()
-
-
-	sys.exit()
-
-
 	""" From Click Docs @ https://click.palletsprojects.com/en/latest/api/ :
 	standalone_mode – the default behavior is to invoke the script in
 	standalone mode. Click will then handle exceptions and convert them

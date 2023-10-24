@@ -4,6 +4,6 @@ BEGIN;
 
 SET search_path TO development;
 
-DROP FUNCTION fn_user_insert;
+DROP FUNCTION IF EXISTS fn_user_insert;
 
 COMMIT;
