@@ -1,14 +1,14 @@
 #+TITLE:	Account Maintenance Research (2023)
 #+SUBTITLE:	Log
 #+DATE:		2023-06-09 05:39:10-04:00
-#+LASTMOD: 2023-10-24 04:14:55-0400 (EDT)
+#+LASTMOD: 2023-10-24 04:23:32-0400 (EDT)
 #+OPTIONS:	toc:nil num:nil ^:nil
 #+STARTUP:	indent show3levels
 #+CATEGORIES[]:	Research
 #+TAGS[]:	log python sql sqitch twitter snscrape twscrape socialmedia
 
 * Tuesday, October 24, 2023
-** Reverting Sqitch Back to the Beginning
+** Reverting Sqitch Back to the Beginning (End of this Project)
 - Command: ~sqitch revert --to=devschema~
 - ~dt_auth_user~ and ~fn_user_insert~ must have been removed by a previous statement with a CASCADE option; added ~IF EXISTS~ to appropriate ~DROP TABLE~ statements
 *** Sqitch Revert Scripts with CASCADE Statements
